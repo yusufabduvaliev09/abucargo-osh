@@ -8,17 +8,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Upload, FileSpreadsheet } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import * as XLSX from 'xlsx';
-import { z } from 'zod';
-
-const packageSchema = z.object({
-  trackNumber: z.string()
-    .trim()
-    .min(3, 'Трек-код слишком короткий')
-    .max(100, 'Трек-код слишком длинный')
-    .regex(/^[A-Z0-9\-_]+$/i, 'Трек-код содержит недопустимые символы'),
-  weight: z.number().positive('Вес должен быть положительным').max(1000, 'Вес превышает максимум (1000 кг)').optional(),
-  date: z.string().optional(),
-});
 
 const AdminPackages = () => {
   const [pricePerKg, setPricePerKg] = useState("12.00");
@@ -44,7 +33,10 @@ const AdminPackages = () => {
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
         
         if (jsonData.length > 0) {
-          const cols = Object.keys(jsonData[0]);
+          // Filter out empty columns like _EMPTY4, _EMPTY5
+          const cols = Object.keys(jsonData[0]).filter(col => 
+            col && !col.startsWith('__EMPTY') && col.trim() !== ''
+          );
           setColumns(cols);
           setExcelData(jsonData);
           setShowColumnSelector(true);
@@ -77,26 +69,28 @@ const AdminPackages = () => {
       let skipCount = 0;
 
       for (const row of excelData) {
-        try {
-          // Validate row data
-          const validated = packageSchema.parse({
-            trackNumber: String(row[trackColumn] || '').trim(),
-            weight: weightColumn ? parseFloat(row[weightColumn] || '0') : undefined,
-            date: dateColumn ? String(row[dateColumn] || '') : undefined,
-          });
+        // Get track number - skip if empty
+        const trackNumber = String(row[trackColumn] || '').trim();
+        if (!trackNumber) {
+          skipCount++;
+          continue;
+        }
 
-          // Check if package already exists (with user_id for matching)
+        const packageWeight = weightColumn ? parseFloat(row[weightColumn] || '0') : 0;
+        const packageDate = dateColumn ? String(row[dateColumn] || '') : '';
+
+        try {
+          // Check if package already exists
           const { data: existingPkg } = await supabase
             .from('packages')
-            .select('id, user_id')
-            .eq('track_number', validated.trackNumber)
+            .select('id, user_id, status')
+            .eq('track_number', trackNumber)
             .maybeSingle();
 
-          const arrivedAt = validated.date ? new Date(validated.date).toISOString() : new Date().toISOString();
-          const packageWeight = validated.weight || 0;
+          const arrivedAt = packageDate ? new Date(packageDate).toISOString() : new Date().toISOString();
 
           if (existingPkg) {
-            // Update existing package, keep user_id if it exists
+            // Update existing package - change status to in_transit
             const updateData: any = {
               status: 'in_transit',
               arrived_at: arrivedAt,
@@ -115,17 +109,9 @@ const AdminPackages = () => {
               .eq('id', existingPkg.id);
             updateCount++;
           } else {
-            // Create new package - try to match with user by looking for packages they added
-            // Check if any user has this tracking number in their "waiting" packages
-            const { data: userPkg } = await supabase
-              .from('packages')
-              .select('user_id')
-              .eq('track_number', validated.trackNumber)
-              .eq('status', 'waiting_arrival')
-              .maybeSingle();
-
+            // Create new package with in_transit status
             const newPackage: any = {
-              track_number: validated.trackNumber,
+              track_number: trackNumber,
               weight: packageWeight,
               status: 'in_transit',
               arrived_at: arrivedAt,
@@ -136,28 +122,12 @@ const AdminPackages = () => {
               newPackage.total_price = packageWeight * parseFloat(pricePerKg);
             }
 
-            // If found a user with this tracking number, link it
-            if (userPkg?.user_id) {
-              newPackage.user_id = userPkg.user_id;
-              
-              // Get user profile to set client_code
-              const { data: profile } = await supabase
-                .from('profiles')
-                .select('client_code')
-                .eq('user_id', userPkg.user_id)
-                .maybeSingle();
-              
-              if (profile) {
-                newPackage.client_code = profile.client_code;
-              }
-            }
-
             await supabase.from('packages').insert([newPackage]);
             successCount++;
           }
-        } catch (validationError) {
+        } catch (error) {
+          console.error('Ошибка обработки строки:', error);
           skipCount++;
-          console.error('Пропущена строка:', validationError);
           continue;
         }
       }

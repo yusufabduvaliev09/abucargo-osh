@@ -76,13 +76,27 @@ export const EditUserDialog = ({ open, onOpenChange, user, onSuccess }: EditUser
 
       if (roleError) throw roleError;
 
-      // Обновление пароля через admin API требует серверной функции
-      // Для демо-версии пропускаем обновление пароля
-      // В продакшене нужно создать edge function для этого
+      // Обновление пароля если указан
+      if (password && password.trim() !== "") {
+        const { error: passwordError } = await supabase.functions.invoke(
+          'update-user-password',
+          {
+            body: {
+              userId: user.user_id,
+              password: password,
+            },
+          }
+        );
+
+        if (passwordError) {
+          console.error('Password update error:', passwordError);
+          throw new Error('Не удалось обновить пароль');
+        }
+      }
 
       toast({
         title: "Успешно",
-        description: "Пользователь обновлён",
+        description: "Данные пользователя обновлены",
       });
 
       onSuccess();

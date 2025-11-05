@@ -15,6 +15,7 @@ import AdminPackages from "./pages/admin/Packages";
 import AdminRoles from "./pages/admin/Roles";
 import AdminSettings from "./pages/admin/Settings";
 import CreateAdmin from "./pages/admin/CreateAdmin";
+import InitAdmin from "./pages/InitAdmin";
 import NotFound from "./pages/NotFound";
 import { AppLayout } from "./components/AppLayout";
 
@@ -30,6 +31,7 @@ const App = () => (
           <Route path="/" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/admin/create" element={<CreateAdmin />} />
+          <Route path="/init-admin" element={<InitAdmin />} />
           <Route element={<AppLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/in-transit" element={<InTransit />} />
