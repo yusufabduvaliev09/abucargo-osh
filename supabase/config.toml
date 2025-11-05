@@ -1,1 +1,7 @@
 project_id = "navperzideudgemourrw"
+
+[functions.create-admin]
+verify_jwt = false
+
+[functions.update-user-password]
+verify_jwt = true
