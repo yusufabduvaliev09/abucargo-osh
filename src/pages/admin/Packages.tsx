@@ -257,7 +257,6 @@ const AdminPackages = () => {
                     <SelectValue placeholder="Не выбрано" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Не выбрано</SelectItem>
                     {columns.map(col => (
                       <SelectItem key={col} value={col}>{col}</SelectItem>
                     ))}
@@ -272,7 +271,6 @@ const AdminPackages = () => {
                     <SelectValue placeholder="Не выбрано" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Не выбрано</SelectItem>
                     {columns.map(col => (
                       <SelectItem key={col} value={col}>{col}</SelectItem>
                     ))}
