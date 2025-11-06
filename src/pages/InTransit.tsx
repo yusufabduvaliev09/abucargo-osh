@@ -21,6 +21,7 @@ interface Package {
   weight: number;
   status: string;
   created_at: string;
+  arrived_at: string | null;
   profiles: {
     full_name: string;
     client_code: string;
@@ -253,7 +254,10 @@ const InTransit = () => {
                           </Select>
                         </TableCell>
                         <TableCell>
-                          {new Date(pkg.created_at).toLocaleDateString("ru-RU")}
+                          {pkg.arrived_at 
+                            ? new Date(pkg.arrived_at).toLocaleDateString("ru-RU")
+                            : new Date(pkg.created_at).toLocaleDateString("ru-RU")
+                          }
                         </TableCell>
                       </TableRow>
                     ))

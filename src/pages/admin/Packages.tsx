@@ -15,7 +15,7 @@ const AdminPackages = () => {
   const [uploading, setUploading] = useState(false);
   const [excelData, setExcelData] = useState<any[]>([]);
   const [columns, setColumns] = useState<string[]>([]);
-  const [trackColumn, setTrackColumn] = useState("");
+  const [trackColumn, setTrackColumn] = useState("1");
   const [weightColumn, setWeightColumn] = useState("");
   const [dateColumn, setDateColumn] = useState("");
   const [showColumnSelector, setShowColumnSelector] = useState(false);
@@ -69,15 +69,17 @@ const AdminPackages = () => {
       let skipCount = 0;
 
       for (const row of excelData) {
-        // Get track number - skip if empty
-        const trackNumber = String(row[trackColumn] || '').trim();
+        // Get values by column index (1-based)
+        const rowValues = Object.values(row);
+        const trackNumber = String(rowValues[parseInt(trackColumn) - 1] || '').trim();
+        
         if (!trackNumber) {
           skipCount++;
           continue;
         }
 
-        const packageWeight = weightColumn ? parseFloat(row[weightColumn] || '0') : 0;
-        const packageDate = dateColumn ? String(row[dateColumn] || '') : '';
+        const packageWeight = weightColumn ? parseFloat(String(rowValues[parseInt(weightColumn) - 1] || '0')) : 0;
+        const packageDate = dateColumn ? String(rowValues[parseInt(dateColumn) - 1] || '') : '';
 
         try {
           // Check if package already exists
@@ -141,7 +143,7 @@ const AdminPackages = () => {
       setShowColumnSelector(false);
       setExcelData([]);
       setColumns([]);
-      setTrackColumn("");
+      setTrackColumn("1");
       setWeightColumn("");
       setDateColumn("");
     } catch (error) {
@@ -237,45 +239,33 @@ const AdminPackages = () => {
               <h4 className="font-semibold">Выберите столбцы из файла:</h4>
               
               <div className="space-y-2">
-                <Label>Столбец с трек-кодами</Label>
-                <Select value={trackColumn} onValueChange={setTrackColumn}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Выберите столбец" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {columns.map(col => (
-                      <SelectItem key={col} value={col}>{col}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Номер столбца ТРЕК-КОДА (1,2,3)</Label>
+                <Input
+                  type="text"
+                  value={trackColumn}
+                  onChange={(e) => setTrackColumn(e.target.value)}
+                  placeholder="Например: 1"
+                />
               </div>
 
               <div className="space-y-2">
-                <Label>Столбец с весом (необязательно)</Label>
-                <Select value={weightColumn} onValueChange={setWeightColumn}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Не выбрано" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {columns.map(col => (
-                      <SelectItem key={col} value={col}>{col}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Номер столбца КОД КЛИЕНТА (1,2,3)</Label>
+                <Input
+                  type="text"
+                  value={weightColumn}
+                  onChange={(e) => setWeightColumn(e.target.value)}
+                  placeholder="Например: 2 (необязательно)"
+                />
               </div>
 
               <div className="space-y-2">
-                <Label>Столбец с датой отправки (необязательно)</Label>
-                <Select value={dateColumn} onValueChange={setDateColumn}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Не выбрано" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {columns.map(col => (
-                      <SelectItem key={col} value={col}>{col}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Номер столбца ВЕС ПОСЫЛКИ (1,2,3)</Label>
+                <Input
+                  type="text"
+                  value={dateColumn}
+                  onChange={(e) => setDateColumn(e.target.value)}
+                  placeholder="Например: 3 (необязательно)"
+                />
               </div>
             </div>
           )}
