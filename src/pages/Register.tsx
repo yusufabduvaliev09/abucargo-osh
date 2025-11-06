@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +21,8 @@ const registerSchema = z.object({
 const Register = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const telegramId = searchParams.get("tg_id");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -49,7 +51,7 @@ const Register = () => {
       const cleanPhone = phone.replace(/[^0-9]/g, "");
       const email = `${cleanPhone}@abucargo.app`;
 
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -57,6 +59,7 @@ const Register = () => {
             full_name: fullName,
             phone: phone,
             pvz_location: pvzLocation,
+            telegram_id: telegramId || undefined,
           },
           emailRedirectTo: `${window.location.origin}/`,
         },
@@ -76,7 +79,33 @@ const Register = () => {
             variant: "destructive",
           });
         }
-      } else {
+      } else if (data.user) {
+        // Если есть telegram_id, отправляем уведомление боту
+        if (telegramId) {
+          try {
+            // Получаем client_code из профиля
+            const { data: profileData } = await supabase
+              .from('profiles')
+              .select('client_code')
+              .eq('user_id', data.user.id)
+              .single();
+
+            await fetch("https://abucargo-bot.onrender.com/notify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                telegramId,
+                fio: fullName,
+                code: profileData?.client_code || '',
+                phone: cleanPhone,
+                pvz: pvzLocation
+              })
+            });
+          } catch (notifyError) {
+            console.error("Failed to notify bot:", notifyError);
+          }
+        }
+        
         toast({
           title: "Успешно!",
           description: "Регистрация завершена",

@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.update-user-password]
 verify_jwt = true
+
+[functions.telegram-auth]
+verify_jwt = false

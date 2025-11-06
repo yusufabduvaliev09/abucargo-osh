@@ -14,16 +14,159 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      packages: {
+        Row: {
+          arrived_at: string | null
+          client_code: string | null
+          created_at: string
+          delivered_at: string | null
+          id: string
+          price_per_kg: number | null
+          status: Database["public"]["Enums"]["package_status"]
+          total_price: number | null
+          track_number: string
+          updated_at: string
+          user_id: string | null
+          weight: number
+        }
+        Insert: {
+          arrived_at?: string | null
+          client_code?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          id?: string
+          price_per_kg?: number | null
+          status?: Database["public"]["Enums"]["package_status"]
+          total_price?: number | null
+          track_number: string
+          updated_at?: string
+          user_id?: string | null
+          weight: number
+        }
+        Update: {
+          arrived_at?: string | null
+          client_code?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          id?: string
+          price_per_kg?: number | null
+          status?: Database["public"]["Enums"]["package_status"]
+          total_price?: number | null
+          track_number?: string
+          updated_at?: string
+          user_id?: string | null
+          weight?: number
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          client_code: string
+          created_at: string
+          full_name: string
+          id: string
+          phone: string
+          pvz_location: Database["public"]["Enums"]["pvz_location"]
+          telegram_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_code: string
+          created_at?: string
+          full_name: string
+          id?: string
+          phone: string
+          pvz_location: Database["public"]["Enums"]["pvz_location"]
+          telegram_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          client_code?: string
+          created_at?: string
+          full_name?: string
+          id?: string
+          phone?: string
+          pvz_location?: Database["public"]["Enums"]["pvz_location"]
+          telegram_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      settings: {
+        Row: {
+          contact_info: Json | null
+          created_at: string
+          id: string
+          logo_url: string | null
+          price_per_kg: number | null
+          primary_color: string | null
+          updated_at: string
+        }
+        Insert: {
+          contact_info?: Json | null
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          price_per_kg?: number | null
+          primary_color?: string | null
+          updated_at?: string
+        }
+        Update: {
+          contact_info?: Json | null
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          price_per_kg?: number | null
+          primary_color?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_client_code: {
+        Args: { pvz: Database["public"]["Enums"]["pvz_location"] }
+        Returns: string
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "user" | "admin" | "pvz"
+      package_status: "in_transit" | "arrived" | "delivered" | "waiting_arrival"
+      pvz_location: "nariman" | "zhiydalik" | "dostuk"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +293,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["user", "admin", "pvz"],
+      package_status: ["in_transit", "arrived", "delivered", "waiting_arrival"],
+      pvz_location: ["nariman", "zhiydalik", "dostuk"],
+    },
   },
 } as const

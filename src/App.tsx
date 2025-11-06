@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import TelegramAuth from "./pages/TelegramAuth";
 import Dashboard from "./pages/Dashboard";
 import InTransit from "./pages/InTransit";
 import MyPackages from "./pages/MyPackages";
@@ -30,6 +31,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/telegram-auth" element={<TelegramAuth />} />
           <Route path="/admin/create" element={<CreateAdmin />} />
           <Route path="/init-admin" element={<InitAdmin />} />
           <Route element={<AppLayout />}>
