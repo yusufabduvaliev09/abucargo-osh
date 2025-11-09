@@ -3,9 +3,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileSpreadsheet } from "lucide-react";
+import { Upload, FileSpreadsheet, CalendarIcon } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import * as XLSX from 'xlsx';
 
@@ -18,6 +21,7 @@ const AdminPackages = () => {
   const [trackColumn, setTrackColumn] = useState("1");
   const [weightColumn, setWeightColumn] = useState("");
   const [dateColumn, setDateColumn] = useState("");
+  const [selectedDate, setSelectedDate] = useState<Date>();
   const [showColumnSelector, setShowColumnSelector] = useState(false);
   const { toast } = useToast();
 
@@ -89,7 +93,9 @@ const AdminPackages = () => {
             .eq('track_number', trackNumber)
             .maybeSingle();
 
-          const arrivedAt = packageDate ? new Date(packageDate).toISOString() : new Date().toISOString();
+          const arrivedAt = selectedDate 
+            ? selectedDate.toISOString() 
+            : (packageDate ? new Date(packageDate).toISOString() : new Date().toISOString());
 
           if (existingPkg) {
             // Update existing package - change status to in_transit
@@ -236,7 +242,34 @@ const AdminPackages = () => {
 
           {showColumnSelector && (
             <div className="space-y-4 p-4 border rounded-lg">
-              <h4 className="font-semibold">Выберите столбцы из файла:</h4>
+              <h4 className="font-semibold">Настройки загрузки:</h4>
+              
+              <div className="space-y-2">
+                <Label>Дата трек-кодов</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {selectedDate ? format(selectedDate, "dd.MM.yyyy") : "Выбрать дату для всех трек-кодов"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={setSelectedDate}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+                <p className="text-xs text-muted-foreground">
+                  Эта дата будет применена ко всем загружаемым трек-кодам
+                </p>
+              </div>
               
               <div className="space-y-2">
                 <Label>Номер столбца ТРЕК-КОДА (1,2,3)</Label>
