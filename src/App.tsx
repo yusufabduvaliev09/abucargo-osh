@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import TelegramAuth from "./pages/TelegramAuth";
+import TokenLogin from "./pages/TokenLogin";
 import Dashboard from "./pages/Dashboard";
 import InTransit from "./pages/InTransit";
 import MyPackages from "./pages/MyPackages";
@@ -31,6 +32,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Login />} />
+          <Route path="/login" element={<TokenLogin />} />
           <Route path="/register" element={<Register />} />
           <Route path="/telegram-auth" element={<TelegramAuth />} />
           <Route path="/admin/create" element={<CreateAdmin />} />

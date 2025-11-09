@@ -18,9 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, MessageCircle, Pencil, Trash2 } from "lucide-react";
+import { Search, MessageCircle, Pencil, Trash2, UserPlus, Upload, Link as LinkIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EditUserDialog } from "@/components/EditUserDialog";
+import { AddUserDialog } from "@/components/AddUserDialog";
+import * as XLSX from 'xlsx';
 
 interface User {
   id: string;
@@ -30,6 +32,7 @@ interface User {
   phone: string;
   pvz_location: string;
   created_at: string;
+  auth_token: string | null;
 }
 
 const AdminUsers = () => {
@@ -38,6 +41,7 @@ const AdminUsers = () => {
   const [pvzFilter, setPvzFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const { toast } = useToast();
 
@@ -118,6 +122,106 @@ const AdminUsers = () => {
     return labels[pvz] || pvz;
   };
 
+  const getPvzFromCode = (code: string): "nariman" | "zhiydalik" | "dostuk" | null => {
+    const prefix = code.substring(0, 2).toUpperCase();
+    if (prefix === "YQ") return "nariman";
+    if (prefix === "YX") return "zhiydalik";
+    if (prefix === "JL") return "dostuk";
+    return null;
+  };
+
+  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const row of jsonData as any[]) {
+        const clientCode = row['ID']?.toString().trim().toUpperCase();
+        const fullName = row['ФИО']?.toString().trim();
+        const phone = row['Телефон']?.toString().trim();
+
+        if (!clientCode || !fullName || !phone) {
+          errorCount++;
+          continue;
+        }
+
+        const pvz = getPvzFromCode(clientCode);
+        if (!pvz) {
+          errorCount++;
+          continue;
+        }
+
+        try {
+          const response = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+              },
+              body: JSON.stringify({
+                client_code: clientCode,
+                full_name: fullName,
+                phone: phone,
+                pvz_location: pvz,
+              }),
+            }
+          );
+
+          if (response.ok) {
+            successCount++;
+          } else {
+            errorCount++;
+          }
+        } catch (error) {
+          errorCount++;
+        }
+      }
+
+      toast({
+        title: "Импорт завершен",
+        description: `Успешно: ${successCount}, Ошибок: ${errorCount}`,
+      });
+
+      fetchUsers();
+    } catch (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось прочитать файл",
+        variant: "destructive",
+      });
+    }
+
+    e.target.value = '';
+  };
+
+  const copyLoginLink = (authToken: string | null) => {
+    if (!authToken) {
+      toast({
+        title: "Ошибка",
+        description: "Токен не найден",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const link = `${window.location.origin}/login?token=${authToken}`;
+    navigator.clipboard.writeText(link);
+    toast({
+      title: "Скопировано",
+      description: "Ссылка для входа скопирована",
+    });
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <Card>
@@ -125,6 +229,25 @@ const AdminUsers = () => {
           <CardTitle>Пользователи</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex gap-2 flex-wrap mb-4">
+            <Button onClick={() => setAddDialogOpen(true)}>
+              <UserPlus className="h-4 w-4 mr-2" />
+              Добавить пользователя
+            </Button>
+            <Button variant="outline" asChild>
+              <label htmlFor="excel-upload" className="cursor-pointer">
+                <Upload className="h-4 w-4 mr-2" />
+                Импорт из Excel
+                <input
+                  id="excel-upload"
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleExcelUpload}
+                  className="hidden"
+                />
+              </label>
+            </Button>
+          </div>
           <div className="flex gap-2 flex-wrap">
             <Input
               placeholder="Поиск по ID, ФИО или телефону"
@@ -164,13 +287,14 @@ const AdminUsers = () => {
                     <TableHead>Телефон</TableHead>
                     <TableHead>ПВЗ</TableHead>
                     <TableHead>Дата регистрации</TableHead>
+                    <TableHead>Ссылка входа</TableHead>
                     <TableHead>Действия</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {users.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center text-muted-foreground">
                         Пользователи не найдены
                       </TableCell>
                     </TableRow>
@@ -183,6 +307,15 @@ const AdminUsers = () => {
                         <TableCell>{getPvzLabel(user.pvz_location)}</TableCell>
                         <TableCell>
                           {new Date(user.created_at).toLocaleDateString("ru-RU")}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => copyLoginLink(user.auth_token)}
+                          >
+                            <LinkIcon className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
@@ -226,6 +359,12 @@ const AdminUsers = () => {
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         user={selectedUser}
+        onSuccess={fetchUsers}
+      />
+      
+      <AddUserDialog
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
         onSuccess={fetchUsers}
       />
     </div>
