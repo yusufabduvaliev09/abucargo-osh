@@ -15,6 +15,7 @@ export const AddUserDialog = ({ open, onOpenChange, onSuccess }: AddUserDialogPr
   const [clientCode, setClientCode] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
@@ -29,7 +30,7 @@ export const AddUserDialog = ({ open, onOpenChange, onSuccess }: AddUserDialogPr
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!clientCode || !fullName || !phone) {
+    if (!clientCode || !fullName || !phone || !password) {
       toast({
         title: "Ошибка",
         description: "Заполните все поля",
@@ -62,6 +63,7 @@ export const AddUserDialog = ({ open, onOpenChange, onSuccess }: AddUserDialogPr
           full_name: fullName,
           phone: phone,
           pvz_location: pvz,
+          password: password,
         }),
       });
 
@@ -73,12 +75,13 @@ export const AddUserDialog = ({ open, onOpenChange, onSuccess }: AddUserDialogPr
 
       toast({
         title: "Успешно",
-        description: "Пользователь создан",
+        description: "✅ Пользователь успешно добавлен",
       });
 
       setClientCode("");
       setFullName("");
       setPhone("");
+      setPassword("");
       onOpenChange(false);
       onSuccess();
     } catch (error: any) {
@@ -100,7 +103,7 @@ export const AddUserDialog = ({ open, onOpenChange, onSuccess }: AddUserDialogPr
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="client_code">ID клиента (YQ, YX, JL)</Label>
+            <Label htmlFor="client_code">ID клиента</Label>
             <Input
               id="client_code"
               value={clientCode}
@@ -110,16 +113,16 @@ export const AddUserDialog = ({ open, onOpenChange, onSuccess }: AddUserDialogPr
             />
           </div>
           <div>
-            <Label htmlFor="full_name">ФИО</Label>
+            <Label htmlFor="full_name">Имя</Label>
             <Input
               id="full_name"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder="Иванов Иван Иванович"
+              placeholder="Иванов Иван"
             />
           </div>
           <div>
-            <Label htmlFor="phone">Телефон</Label>
+            <Label htmlFor="phone">Номер телефона</Label>
             <Input
               id="phone"
               value={phone}
@@ -127,8 +130,18 @@ export const AddUserDialog = ({ open, onOpenChange, onSuccess }: AddUserDialogPr
               placeholder="+996555123456"
             />
           </div>
+          <div>
+            <Label htmlFor="password">Пароль</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Введите пароль"
+            />
+          </div>
           <Button type="submit" disabled={loading} className="w-full">
-            {loading ? "Создание..." : "Создать пользователя"}
+            {loading ? "Добавление..." : "Добавить"}
           </Button>
         </form>
       </DialogContent>

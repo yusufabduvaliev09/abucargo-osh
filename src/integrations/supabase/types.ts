@@ -61,7 +61,6 @@ export type Database = {
       }
       profiles: {
         Row: {
-          auth_token: string | null
           client_code: string
           created_at: string
           full_name: string
@@ -73,7 +72,6 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          auth_token?: string | null
           client_code: string
           created_at?: string
           full_name: string
@@ -85,7 +83,6 @@ export type Database = {
           user_id: string
         }
         Update: {
-          auth_token?: string | null
           client_code?: string
           created_at?: string
           full_name?: string
@@ -154,7 +151,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      generate_auth_token: { Args: { client_code: string }; Returns: string }
       generate_client_code: {
         Args: { pvz: Database["public"]["Enums"]["pvz_location"] }
         Returns: string

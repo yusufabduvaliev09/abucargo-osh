@@ -18,11 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, MessageCircle, Pencil, Trash2, UserPlus, Upload, Link as LinkIcon } from "lucide-react";
+import { Search, UserPlus, Upload, Edit, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EditUserDialog } from "@/components/EditUserDialog";
 import { AddUserDialog } from "@/components/AddUserDialog";
-import * as XLSX from 'xlsx';
+import { read, utils } from 'xlsx';
 
 interface User {
   id: string;
@@ -32,7 +32,6 @@ interface User {
   phone: string;
   pvz_location: string;
   created_at: string;
-  auth_token: string | null;
 }
 
 const AdminUsers = () => {
@@ -40,9 +39,8 @@ const AdminUsers = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [pvzFilter, setPvzFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [showAddDialog, setShowAddDialog] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -57,15 +55,21 @@ const AdminUsers = () => {
       query = query.eq("pvz_location", pvzFilter as "nariman" | "zhiydalik" | "dostuk");
     }
 
-    const { data } = await query.order("created_at", { ascending: false });
+    const { data, error } = await query.order("created_at", { ascending: false });
 
-    if (data) {
-      setUsers(data);
+    if (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось загрузить пользователей",
+        variant: "destructive",
+      });
+    } else {
+      setUsers(data || []);
     }
     setLoading(false);
   };
 
-  const handleSearch = async () => {
+  const handleSearch = () => {
     if (!searchTerm) {
       fetchUsers();
       return;
@@ -78,22 +82,98 @@ const AdminUsers = () => {
       query = query.eq("pvz_location", pvzFilter as "nariman" | "zhiydalik" | "dostuk");
     }
 
-    const { data } = await query.or(
-      `client_code.ilike.%${searchTerm}%,full_name.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`
-    );
+    query.or(`client_code.ilike.%${searchTerm}%,full_name.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`)
+      .then(({ data, error }) => {
+        if (error) {
+          toast({
+            title: "Ошибка",
+            description: "Ошибка поиска",
+            variant: "destructive",
+          });
+        } else {
+          setUsers(data || []);
+        }
+        setLoading(false);
+      });
+  };
 
-    if (data) {
-      setUsers(data);
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = read(data);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const jsonData = utils.sheet_to_json(worksheet);
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const row of jsonData as any[]) {
+        const clientCode = row['ID']?.toString().trim();
+        const fullName = row['Имя']?.toString().trim();
+        const phone = row['Телефон']?.toString().trim();
+        const password = row['Пароль']?.toString().trim();
+
+        if (!clientCode || !fullName || !phone || !password) {
+          errorCount++;
+          continue;
+        }
+
+        const pvzLocation = clientCode.startsWith('YQ') ? 'nariman' :
+                          clientCode.startsWith('YX') ? 'zhiydalik' :
+                          clientCode.startsWith('JL') ? 'dostuk' : null;
+
+        if (!pvzLocation) {
+          errorCount++;
+          continue;
+        }
+
+        try {
+          const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({
+              client_code: clientCode,
+              full_name: fullName,
+              phone: phone,
+              pvz_location: pvzLocation,
+              password: password,
+            }),
+          });
+
+          if (response.ok) {
+            successCount++;
+          } else {
+            errorCount++;
+          }
+        } catch (error) {
+          errorCount++;
+        }
+      }
+
+      toast({
+        title: "Импорт завершён",
+        description: `✅ Импорт завершён успешно. Добавлено: ${successCount}${errorCount > 0 ? `, Ошибок: ${errorCount}` : ''}`,
+      });
+
+      fetchUsers();
+    } catch (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось обработать файл",
+        variant: "destructive",
+      });
     }
-    setLoading(false);
+
+    event.target.value = '';
   };
 
-  const handleWhatsApp = (phone: string) => {
-    const cleanPhone = phone.replace(/[^0-9]/g, "");
-    window.open(`https://wa.me/${cleanPhone}`, "_blank");
-  };
-
-  const handleDelete = async (userId: string) => {
+  const handleDeleteUser = async (userId: string) => {
     if (!confirm("Вы уверены, что хотите удалить этого пользователя?")) return;
 
     const { error } = await supabase.from("profiles").delete().eq("id", userId);
@@ -114,150 +194,50 @@ const AdminUsers = () => {
   };
 
   const getPvzLabel = (pvz: string) => {
-    const labels: { [key: string]: string } = {
-      nariman: "Нариман",
-      zhiydalik: "Жийдалик УПТК",
-      dostuk: "Достук",
-    };
-    return labels[pvz] || pvz;
-  };
-
-  const getPvzFromCode = (code: string): "nariman" | "zhiydalik" | "dostuk" | null => {
-    const prefix = code.substring(0, 2).toUpperCase();
-    if (prefix === "YQ") return "nariman";
-    if (prefix === "YX") return "zhiydalik";
-    if (prefix === "JL") return "dostuk";
-    return null;
-  };
-
-  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data);
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-      let successCount = 0;
-      let errorCount = 0;
-
-      for (const row of jsonData as any[]) {
-        const clientCode = row['ID']?.toString().trim().toUpperCase();
-        const fullName = row['ФИО']?.toString().trim();
-        const phone = row['Телефон']?.toString().trim();
-
-        if (!clientCode || !fullName || !phone) {
-          errorCount++;
-          continue;
-        }
-
-        const pvz = getPvzFromCode(clientCode);
-        if (!pvz) {
-          errorCount++;
-          continue;
-        }
-
-        try {
-          const response = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-              },
-              body: JSON.stringify({
-                client_code: clientCode,
-                full_name: fullName,
-                phone: phone,
-                pvz_location: pvz,
-              }),
-            }
-          );
-
-          if (response.ok) {
-            successCount++;
-          } else {
-            errorCount++;
-          }
-        } catch (error) {
-          errorCount++;
-        }
-      }
-
-      toast({
-        title: "Импорт завершен",
-        description: `Успешно: ${successCount}, Ошибок: ${errorCount}`,
-      });
-
-      fetchUsers();
-    } catch (error) {
-      toast({
-        title: "Ошибка",
-        description: "Не удалось прочитать файл",
-        variant: "destructive",
-      });
+    switch (pvz) {
+      case "nariman": return "Нариман";
+      case "zhiydalik": return "Жийдалик УПТК";
+      case "dostuk": return "Достук";
+      default: return pvz;
     }
-
-    e.target.value = '';
-  };
-
-  const copyLoginLink = (authToken: string | null) => {
-    if (!authToken) {
-      toast({
-        title: "Ошибка",
-        description: "Токен не найден",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const link = `${window.location.origin}/login?token=${authToken}`;
-    navigator.clipboard.writeText(link);
-    toast({
-      title: "Скопировано",
-      description: "Ссылка для входа скопирована",
-    });
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto p-6">
       <Card>
         <CardHeader>
           <CardTitle>Пользователи</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-2 flex-wrap mb-4">
-            <Button onClick={() => setAddDialogOpen(true)}>
+        <CardContent>
+          <div className="flex gap-2 mb-4">
+            <Button onClick={() => setShowAddDialog(true)}>
               <UserPlus className="h-4 w-4 mr-2" />
-              Добавить пользователя
+              Добавить вручную
             </Button>
             <Button variant="outline" asChild>
-              <label htmlFor="excel-upload" className="cursor-pointer">
+              <label className="cursor-pointer">
                 <Upload className="h-4 w-4 mr-2" />
                 Импорт из Excel
                 <input
-                  id="excel-upload"
                   type="file"
                   accept=".xlsx,.xls"
-                  onChange={handleExcelUpload}
                   className="hidden"
+                  onChange={handleFileUpload}
                 />
               </label>
             </Button>
           </div>
-          <div className="flex gap-2 flex-wrap">
+
+          <div className="flex gap-2 mb-4">
             <Input
-              placeholder="Поиск по ID, ФИО или телефону"
+              placeholder="Поиск по ID, имени или телефону"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               className="flex-1"
             />
             <Select value={pvzFilter} onValueChange={setPvzFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder="Все ПВЗ" />
               </SelectTrigger>
               <SelectContent>
@@ -274,27 +254,23 @@ const AdminUsers = () => {
           </div>
 
           {loading ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            </div>
+            <div className="text-center py-8">Загрузка...</div>
           ) : (
             <div className="border rounded-lg">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>ID</TableHead>
-                    <TableHead>ФИО</TableHead>
+                    <TableHead>Имя</TableHead>
                     <TableHead>Телефон</TableHead>
                     <TableHead>ПВЗ</TableHead>
-                    <TableHead>Дата регистрации</TableHead>
-                    <TableHead>Ссылка входа</TableHead>
                     <TableHead>Действия</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {users.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="text-center">
                         Пользователи не найдены
                       </TableCell>
                     </TableRow>
@@ -306,44 +282,23 @@ const AdminUsers = () => {
                         <TableCell>{user.phone}</TableCell>
                         <TableCell>{getPvzLabel(user.pvz_location)}</TableCell>
                         <TableCell>
-                          {new Date(user.created_at).toLocaleDateString("ru-RU")}
-                        </TableCell>
-                        <TableCell>
                           <Button
-                            size="sm"
                             variant="outline"
-                            onClick={() => copyLoginLink(user.auth_token)}
+                            size="sm"
+                            onClick={() => setEditingUser(user)}
                           >
-                            <LinkIcon className="h-4 w-4" />
+                            <Edit className="h-4 w-4 mr-2" />
+                            Изменить
                           </Button>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleWhatsApp(user.phone)}
-                            >
-                              <MessageCircle className="h-4 w-4" />
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => {
-                                setSelectedUser(user);
-                                setEditDialogOpen(true);
-                              }}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleDelete(user.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeleteUser(user.id)}
+                            className="ml-2"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Удалить
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))
@@ -354,19 +309,21 @@ const AdminUsers = () => {
           )}
         </CardContent>
       </Card>
-      
-      <EditUserDialog
-        open={editDialogOpen}
-        onOpenChange={setEditDialogOpen}
-        user={selectedUser}
-        onSuccess={fetchUsers}
-      />
-      
+
       <AddUserDialog
-        open={addDialogOpen}
-        onOpenChange={setAddDialogOpen}
+        open={showAddDialog}
+        onOpenChange={setShowAddDialog}
         onSuccess={fetchUsers}
       />
+
+      {editingUser && (
+        <EditUserDialog
+          open={!!editingUser}
+          onOpenChange={(open) => !open && setEditingUser(null)}
+          user={editingUser}
+          onSuccess={fetchUsers}
+        />
+      )}
     </div>
   );
 };

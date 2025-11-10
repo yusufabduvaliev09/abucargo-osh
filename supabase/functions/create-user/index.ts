@@ -23,10 +23,13 @@ serve(async (req) => {
       }
     )
 
-    const { client_code, full_name, phone, pvz_location } = await req.json()
+    const { client_code, full_name, phone, pvz_location, password } = await req.json()
 
-    if (!client_code || !full_name || !phone || !pvz_location) {
-      throw new Error('Все поля обязательны')
+    if (!client_code || !full_name || !phone || !pvz_location || !password) {
+      return new Response(
+        JSON.stringify({ error: 'Все поля обязательны' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
     }
 
     // Проверяем, не существует ли уже пользователь с таким client_code
@@ -37,16 +40,16 @@ serve(async (req) => {
       .single()
 
     if (existingProfile) {
-      throw new Error('Пользователь с таким ID уже существует')
+      return new Response(
+        JSON.stringify({ error: 'Пользователь с таким ID уже существует' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
     }
 
     // Создаем email из client_code
     const email = `${client_code.toLowerCase()}@abucargo.app`
-    
-    // Генерируем случайный пароль (не используется для входа)
-    const password = crypto.randomUUID()
 
-    // Создаем пользователя
+    // Создаем пользователя с указанным паролем
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -61,7 +64,10 @@ serve(async (req) => {
 
     if (authError) {
       console.error('Auth error:', authError)
-      throw authError
+      return new Response(
+        JSON.stringify({ error: 'Ошибка создания пользователя' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
     }
 
     console.log('User created:', authData.user.id)
@@ -80,7 +86,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: 'Произошла ошибка' }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400 
