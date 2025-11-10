@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface AddUserDialogProps {
   open: boolean;
@@ -52,25 +53,22 @@ export const AddUserDialog = ({ open, onOpenChange, onSuccess }: AddUserDialogPr
     setLoading(true);
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
+      const { data, error } = await supabase.functions.invoke('create-user', {
+        body: {
           client_code: clientCode.toUpperCase(),
           full_name: fullName,
           phone: phone,
           pvz_location: pvz,
           password: password,
-        }),
+        },
       });
 
-      const data = await response.json();
+      if (error) {
+        throw new Error(error.message || 'Ошибка создания пользователя');
+      }
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Ошибка создания пользователя');
+      if (data?.error) {
+        throw new Error(data.error);
       }
 
       toast({
