@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, UserPlus, Upload, Edit, Trash2 } from "lucide-react";
+import { Search, UserPlus, Upload, Edit, Trash2, UserCog } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EditUserDialog } from "@/components/EditUserDialog";
 import { AddUserDialog } from "@/components/AddUserDialog";
@@ -109,15 +109,33 @@ const AdminUsers = () => {
 
       let successCount = 0;
       let errorCount = 0;
+      const errors: string[] = [];
 
       for (const row of jsonData as any[]) {
-        const clientCode = row['ID']?.toString().trim();
-        const fullName = row['Имя']?.toString().trim();
-        const phone = row['Телефон']?.toString().trim();
-        const password = row['Пароль']?.toString().trim();
+        // Поддержка русских и английских заголовков
+        const clientCode = (
+          row['ID'] || row['Код'] || row['Код_пользователя'] || 
+          row['id'] || row['Id']
+        )?.toString().trim();
+        
+        const fullName = (
+          row['Имя'] || row['ФИО'] || 
+          row['Name'] || row['FullName']
+        )?.toString().trim();
+        
+        const phone = (
+          row['Телефон'] || row['Номер'] || 
+          row['Phone'] || row['Number']
+        )?.toString().trim();
+        
+        const password = (
+          row['Пароль'] || 
+          row['Password'] || row['Pwd']
+        )?.toString().trim();
 
         if (!clientCode || !fullName || !phone || !password) {
           errorCount++;
+          errors.push(`Строка пропущена: отсутствуют обязательные поля`);
           continue;
         }
 
@@ -127,32 +145,30 @@ const AdminUsers = () => {
 
         if (!pvzLocation) {
           errorCount++;
+          errors.push(`${clientCode}: ID должен начинаться с YQ, YX или JL`);
           continue;
         }
 
         try {
-          const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            },
-            body: JSON.stringify({
+          const { data, error } = await supabase.functions.invoke('create-user', {
+            body: {
               client_code: clientCode,
               full_name: fullName,
               phone: phone,
               pvz_location: pvzLocation,
               password: password,
-            }),
+            },
           });
 
-          if (response.ok) {
-            successCount++;
-          } else {
+          if (error || data?.error) {
             errorCount++;
+            errors.push(`${clientCode}: ${error?.message || data?.error}`);
+          } else {
+            successCount++;
           }
-        } catch (error) {
+        } catch (error: any) {
           errorCount++;
+          errors.push(`${clientCode}: ${error.message}`);
         }
       }
 
@@ -160,6 +176,10 @@ const AdminUsers = () => {
         title: "Импорт завершён",
         description: `✅ Импорт завершён успешно. Добавлено: ${successCount}${errorCount > 0 ? `, Ошибок: ${errorCount}` : ''}`,
       });
+
+      if (errors.length > 0 && errors.length <= 5) {
+        console.log('Ошибки импорта:', errors);
+      }
 
       fetchUsers();
     } catch (error) {
@@ -193,11 +213,64 @@ const AdminUsers = () => {
     }
   };
 
+  const handleLoginAsUser = async (userId: string, userName: string) => {
+    if (!confirm(`Вы уверены, что хотите войти как ${userName}?`)) return;
+
+    try {
+      // Сохраняем текущую сессию администратора
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        localStorage.setItem('admin_session', JSON.stringify({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        }));
+        localStorage.setItem('impersonated_user_name', userName);
+      }
+
+      // Вызываем edge function для входа как пользователь
+      const { data, error } = await supabase.functions.invoke('admin-login-as-user', {
+        body: { target_user_id: userId },
+      });
+
+      if (error || data?.error) {
+        throw new Error(error?.message || data?.error || 'Не удалось войти как пользователь');
+      }
+
+      // Используем hashed_token для верификации через OTP
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        token_hash: data.hashed_token,
+        type: 'magiclink',
+      });
+
+      if (verifyError) throw verifyError;
+
+      toast({
+        title: "Успешно",
+        description: `Вы вошли как ${userName}`,
+      });
+
+      // Перенаправляем на дашборд пользователя
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 500);
+
+    } catch (error: any) {
+      localStorage.removeItem('admin_session');
+      localStorage.removeItem('impersonated_user_name');
+      
+      toast({
+        title: "Ошибка",
+        description: error.message || "Не удалось войти как пользователь",
+        variant: "destructive",
+      });
+    }
+  };
+
   const getPvzLabel = (pvz: string) => {
     switch (pvz) {
-      case "nariman": return "Нариман";
-      case "zhiydalik": return "Жийдалик УПТК";
-      case "dostuk": return "Достук";
+      case "nariman": return "Нариман, Ул. Сулайманова 32";
+      case "zhiydalik": return "Жийдалик, УПТК Наби Кожо 61Б";
+      case "dostuk": return "Достук, Ул. Хабиба Абдуллаева 78";
       default: return pvz;
     }
   };
@@ -282,23 +355,32 @@ const AdminUsers = () => {
                         <TableCell>{user.phone}</TableCell>
                         <TableCell>{getPvzLabel(user.pvz_location)}</TableCell>
                         <TableCell>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setEditingUser(user)}
-                          >
-                            <Edit className="h-4 w-4 mr-2" />
-                            Изменить
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDeleteUser(user.id)}
-                            className="ml-2"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Удалить
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleLoginAsUser(user.user_id, user.full_name)}
+                            >
+                              <UserCog className="h-4 w-4 mr-2" />
+                              Войти как пользователь
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditingUser(user)}
+                            >
+                              <Edit className="h-4 w-4 mr-2" />
+                              Изменить
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleDeleteUser(user.id)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Удалить
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))

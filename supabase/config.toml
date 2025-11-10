@@ -8,3 +8,9 @@ verify_jwt = true
 
 [functions.telegram-auth]
 verify_jwt = false
+
+[functions.admin-login-as-user]
+verify_jwt = true
+
+[functions.create-user]
+verify_jwt = true
