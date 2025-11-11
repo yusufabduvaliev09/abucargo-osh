@@ -158,7 +158,7 @@ const Register = () => {
               <Label htmlFor="password">Пароль</Label>
               <Input
                 id="password"
-                type="password"
+                type="text"
                 placeholder="Минимум 6 символов"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
