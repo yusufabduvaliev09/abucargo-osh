@@ -120,7 +120,7 @@ const Login = () => {
               <Label htmlFor="password">Пароль</Label>
               <Input
                 id="password"
-                type="password"
+                type="text"
                 placeholder="Введите пароль"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
