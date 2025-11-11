@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, UserPlus, Upload, Edit, Trash2, UserCog } from "lucide-react";
+import { Search, UserPlus, Upload, Edit, Trash2, UserCog, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EditUserDialog } from "@/components/EditUserDialog";
 import { AddUserDialog } from "@/components/AddUserDialog";
@@ -275,6 +275,12 @@ const AdminUsers = () => {
     }
   };
 
+  const formatPhoneForWhatsApp = (phone: string) => {
+    // Remove all non-digit characters
+    const cleaned = phone.replace(/\D/g, "");
+    return `https://wa.me/${cleaned}`;
+  };
+
   return (
     <div className="container mx-auto p-6">
       <Card>
@@ -358,27 +364,41 @@ const AdminUsers = () => {
                           <div className="flex gap-2">
                             <Button
                               variant="outline"
-                              size="sm"
-                              onClick={() => handleLoginAsUser(user.user_id, user.full_name)}
+                              size="icon"
+                              asChild
+                              title="Написать в WhatsApp"
                             >
-                              <UserCog className="h-4 w-4 mr-2" />
-                              Войти как пользователь
+                              <a
+                                href={formatPhoneForWhatsApp(user.phone)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <MessageCircle className="h-4 w-4" />
+                              </a>
                             </Button>
                             <Button
                               variant="outline"
-                              size="sm"
-                              onClick={() => setEditingUser(user)}
+                              size="icon"
+                              onClick={() => handleLoginAsUser(user.user_id, user.full_name)}
+                              title="Войти как пользователь"
                             >
-                              <Edit className="h-4 w-4 mr-2" />
-                              Изменить
+                              <UserCog className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() => setEditingUser(user)}
+                              title="Изменить"
+                            >
+                              <Edit className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="destructive"
-                              size="sm"
+                              size="icon"
                               onClick={() => handleDeleteUser(user.id)}
+                              title="Удалить"
                             >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Удалить
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </TableCell>

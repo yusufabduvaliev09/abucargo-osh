@@ -37,6 +37,7 @@ export function AppSidebar({ userRole }: AppSidebarProps) {
     { title: "Главное", url: "/dashboard", icon: Home },
     { title: "В дороге", url: "/in-transit", icon: Truck },
     { title: "Мои посылки", url: "/my-packages", icon: Package },
+    { title: "Контакты", url: "/contacts", icon: Users },
   ];
 
   const adminItems = [
