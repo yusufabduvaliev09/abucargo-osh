@@ -97,7 +97,18 @@ export const AddUserDialog = ({ open, onOpenChange, onSuccess }: AddUserDialogPr
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Добавить пользователя</DialogTitle>
+          <DialogTitle>Создать пользователя вручную</DialogTitle>
+          <p className="text-sm text-muted-foreground mt-2">
+            Введите данные нового пользователя, чтобы создать для него учетную запись в системе Abukargo.
+          </p>
+          <p className="text-sm text-yellow-600 dark:text-yellow-500 mt-2">
+            <strong>Важно для администратора:</strong>
+          </p>
+          <ul className="text-xs text-muted-foreground list-disc list-inside mt-1 space-y-1">
+            <li>После создания обязательно протестируйте вход под данными нового пользователя.</li>
+            <li>При импорте из Excel убедитесь, что система корректно читает ID из указанной колонки, а не присваивает его автоматически.</li>
+            <li>О любых ошибках, связанных с входом новых пользователей или некорректным ID, сообщайте разработчику.</li>
+          </ul>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

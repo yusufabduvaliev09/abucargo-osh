@@ -71,24 +71,39 @@ serve(async (req) => {
       )
     }
 
-    // Проверяем, не существует ли уже пользователь с таким client_code
-    const { data: existingProfile } = await supabaseAdmin
+    // Проверяем уникальность client_code
+    const { data: existingByCode } = await supabaseAdmin
       .from('profiles')
       .select('id')
       .eq('client_code', client_code)
-      .single()
+      .maybeSingle()
 
-    if (existingProfile) {
+    if (existingByCode) {
       return new Response(
-        JSON.stringify({ error: 'Пользователь с таким ID уже существует' }),
+        JSON.stringify({ error: `Пользователь с ID ${client_code} уже существует` }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
 
-    // Создаем email из client_code
-    const email = `${client_code.toLowerCase()}@abucargo.app`
+    // Проверяем уникальность телефона
+    const { data: existingByPhone } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('phone', phone)
+      .maybeSingle()
 
-    // Создаем пользователя с указанным паролем
+    if (existingByPhone) {
+      return new Response(
+        JSON.stringify({ error: `Пользователь с телефоном ${phone} уже существует` }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
+
+    // Создаем email из телефона (без +)
+    const cleanPhone = phone.replace(/[^0-9]/g, '')
+    const email = `${cleanPhone}@abucargo.app`
+
+    // Создаем пользователя с указанным паролем и передаем client_code в metadata
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -97,7 +112,7 @@ serve(async (req) => {
         full_name,
         phone,
         pvz_location,
-        client_code
+        client_code  // ВАЖНО: триггер handle_new_user прочитает это поле и не будет авто-генерировать ID
       }
     })
 

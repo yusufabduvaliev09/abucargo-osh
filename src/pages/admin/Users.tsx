@@ -116,7 +116,7 @@ const AdminUsers = () => {
         const clientCode = (
           row['ID'] || row['Код'] || row['Код_пользователя'] || 
           row['id'] || row['Id']
-        )?.toString().trim();
+        )?.toString().trim().toUpperCase();
         
         const fullName = (
           row['Имя'] || row['ФИО'] || 
@@ -135,7 +135,7 @@ const AdminUsers = () => {
 
         if (!clientCode || !fullName || !phone || !password) {
           errorCount++;
-          errors.push(`Строка пропущена: отсутствуют обязательные поля`);
+          errors.push(`Строка ${successCount + errorCount}: отсутствуют обязательные поля (ID, Имя, Телефон, Пароль)`);
           continue;
         }
 
