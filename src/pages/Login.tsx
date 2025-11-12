@@ -12,7 +12,7 @@ import { Eye, EyeOff } from "lucide-react";
 
 const loginSchema = z.object({
   phone: z.string().min(10, "Введите корректный номер телефона"),
-  password: z.string().min(6, "Пароль должен содержать минимум 6 символов"),
+  password: z.string().min(3, "Пароль должен содержать минимум 3 символов"),
 });
 
 const Login = () => {
