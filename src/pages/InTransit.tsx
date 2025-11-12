@@ -93,11 +93,13 @@ const InTransit = () => {
     }
 
     setLoading(true);
+    
+    // Search by track_number OR client_code
     const { data: packagesData } = await supabase
       .from("packages")
       .select("*")
       .eq("status", "in_transit")
-      .ilike("track_number", `%${searchTerm}%`)
+      .or(`track_number.ilike.%${searchTerm}%,client_code.ilike.%${searchTerm}%`)
       .order("created_at", { ascending: false });
 
     if (packagesData) {
@@ -184,7 +186,7 @@ const InTransit = () => {
         <CardContent className="space-y-4">
           <div className="flex gap-2">
             <Input
-              placeholder="Поиск по трек-номеру"
+              placeholder="Поиск по трек-номеру или ID клиента"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
