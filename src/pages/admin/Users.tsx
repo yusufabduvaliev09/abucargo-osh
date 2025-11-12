@@ -72,7 +72,126 @@ const AdminUsers = () => {
   const handleSearch = () => {
     if (!searchTerm) {
       fetchUsers();
-      return;
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const data = await file.arrayBuffer();
+    const workbook = read(data);
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const jsonData = utils.sheet_to_json(worksheet);
+
+    let successCount = 0;
+    let errorCount = 0;
+    const errors: string[] = [];
+
+    for (const row of jsonData as any[]) {
+      const clientCode = (
+        row['ID'] || row['Код'] || row['Код_пользователя'] ||
+        row['id'] || row['Id']
+      )?.toString().trim().toUpperCase();
+
+      const fullName = (
+        row['Имя'] || row['ФИО'] ||
+        row['Name'] || row['FullName']
+      )?.toString().trim();
+
+      const phone = (
+        row['Телефон'] || row['Номер'] ||
+        row['Phone'] || row['Number']
+      )?.toString().trim();
+
+      const password = (
+        row['Пароль'] ||
+        row['Password'] || row['Pwd']
+      )?.toString().trim();
+
+      if (!clientCode || !fullName || !phone || !password) {
+        errorCount++;
+        errors.push(`Строка ${successCount + errorCount}: отсутствуют обязательные поля`);
+        continue;
+      }
+
+      const pvzLocation = clientCode.startsWith('YQ') ? 'nariman' :
+        clientCode.startsWith('YX') ? 'zhiydalik' :
+        clientCode.startsWith('JL') ? 'dostuk' : null;
+
+      if (!pvzLocation) {
+        errorCount++;
+        errors.push(`${clientCode}: ID должен начинаться с YQ, YX или JL`);
+        continue;
+      }
+
+      try {
+        // Проверяем, существует ли пользователь с таким client_code
+        const { data: existingUser, error: selectError } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("client_code", clientCode)
+          .single();
+
+        if (selectError && selectError.code !== "PGRST116") {
+          throw selectError;
+        }
+
+        if (existingUser) {
+          // Обновляем существующего пользователя
+          const { error: updateError } = await supabase
+            .from("profiles")
+            .update({
+              full_name: fullName,
+              phone: phone,
+              pvz_location: pvzLocation,
+              password: password,
+            })
+            .eq("client_code", clientCode);
+
+          if (updateError) throw updateError;
+        } else {
+          // Создаём нового пользователя
+          const { error: insertError } = await supabase
+            .from("profiles")
+            .insert([
+              {
+                client_code: clientCode,
+                full_name: fullName,
+                phone: phone,
+                pvz_location: pvzLocation,
+                password: password,
+              },
+            ]);
+
+          if (insertError) throw insertError;
+        }
+
+        successCount++;
+      } catch (error: any) {
+        errorCount++;
+        errors.push(`${clientCode}: ${error.message}`);
+      }
+    }
+
+    toast({
+      title: "Импорт завершён",
+      description: `✅ Успешно обработано: ${successCount}, Ошибок: ${errorCount}`,
+    });
+
+    if (errors.length > 0 && errors.length <= 5) {
+      console.log('Ошибки импорта:', errors);
+    }
+
+    fetchUsers();
+  } catch (error) {
+    toast({
+      title: "Ошибка",
+      description: "Не удалось обработать файл",
+      variant: "destructive",
+    });
+  }
+
+  event.target.value = '';
+};     return;
     }
 
     setLoading(true);
@@ -97,101 +216,7 @@ const AdminUsers = () => {
       });
   };
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = read(data);
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = utils.sheet_to_json(worksheet);
-
-      let successCount = 0;
-      let errorCount = 0;
-      const errors: string[] = [];
-
-      for (const row of jsonData as any[]) {
-        // Поддержка русских и английских заголовков
-        const clientCode = (
-          row['ID'] || row['Код'] || row['Код_пользователя'] || 
-          row['id'] || row['Id']
-        )?.toString().trim().toUpperCase();
-        
-        const fullName = (
-          row['Имя'] || row['ФИО'] || 
-          row['Name'] || row['FullName']
-        )?.toString().trim();
-        
-        const phone = (
-          row['Телефон'] || row['Номер'] || 
-          row['Phone'] || row['Number']
-        )?.toString().trim();
-        
-        const password = (
-          row['Пароль'] || 
-          row['Password'] || row['Pwd']
-        )?.toString().trim();
-
-        if (!clientCode || !fullName || !phone || !password) {
-          errorCount++;
-          errors.push(`Строка ${successCount + errorCount}: отсутствуют обязательные поля (ID, Имя, Телефон, Пароль)`);
-          continue;
-        }
-
-        const pvzLocation = clientCode.startsWith('YQ') ? 'nariman' :
-                          clientCode.startsWith('YX') ? 'zhiydalik' :
-                          clientCode.startsWith('JL') ? 'dostuk' : null;
-
-        if (!pvzLocation) {
-          errorCount++;
-          errors.push(`${clientCode}: ID должен начинаться с YQ, YX или JL`);
-          continue;
-        }
-
-        try {
-          const { data, error } = await supabase.functions.invoke('create-user', {
-            body: {
-              client_code: clientCode,
-              full_name: fullName,
-              phone: phone,
-              pvz_location: pvzLocation,
-              password: password,
-            },
-          });
-
-          if (error || data?.error) {
-            errorCount++;
-            errors.push(`${clientCode}: ${error?.message || data?.error}`);
-          } else {
-            successCount++;
-          }
-        } catch (error: any) {
-          errorCount++;
-          errors.push(`${clientCode}: ${error.message}`);
-        }
-      }
-
-      toast({
-        title: "Импорт завершён",
-        description: `✅ Импорт завершён успешно. Добавлено: ${successCount}${errorCount > 0 ? `, Ошибок: ${errorCount}` : ''}`,
-      });
-
-      if (errors.length > 0 && errors.length <= 5) {
-        console.log('Ошибки импорта:', errors);
-      }
-
-      fetchUsers();
-    } catch (error) {
-      toast({
-        title: "Ошибка",
-        description: "Не удалось обработать файл",
-        variant: "destructive",
-      });
-    }
-
-    event.target.value = '';
-  };
+  
 
   const handleDeleteUser = async (userId: string) => {
     if (!confirm("Вы уверены, что хотите удалить этого пользователя?")) return;
