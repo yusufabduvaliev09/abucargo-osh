@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Plus } from "lucide-react";
-import { Separator } from "@/components/ui/separator";
 
 interface Contact {
   id: string;
@@ -16,21 +15,9 @@ interface Contact {
   note?: string;
 }
 
-interface ContactInfo {
-  whatsapp_managers?: Contact[];
-  whatsapp_group?: string;
-  telegram?: string;
-  instagram?: string;
-}
-
 export default function AdminContacts() {
-  const [contactInfo, setContactInfo] = useState<ContactInfo>({});
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [newContact, setNewContact] = useState({ name: "", phone: "", note: "" });
-  const [socialLinks, setSocialLinks] = useState({
-    whatsapp_group: "",
-    telegram: "",
-    instagram: "",
-  });
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
@@ -47,31 +34,25 @@ export default function AdminContacts() {
 
       if (error) throw error;
 
-      if (data?.contact_info) {
-        const info = data.contact_info as ContactInfo;
-        setContactInfo(info);
-        setSocialLinks({
-          whatsapp_group: info.whatsapp_group || "",
-          telegram: info.telegram || "",
-          instagram: info.instagram || "",
-        });
+      if (data?.contact_info && Array.isArray(data.contact_info)) {
+        setContacts(data.contact_info as unknown as Contact[]);
       }
     } catch (error: any) {
       console.error("Error fetching contacts:", error);
     }
   };
 
-  const saveContactInfo = async (updatedInfo: ContactInfo) => {
+  const saveContacts = async (updatedContacts: Contact[]) => {
     try {
       const { error } = await supabase
         .from("settings")
-        .update({ contact_info: updatedInfo as any })
+        .update({ contact_info: updatedContacts as any })
         .eq("id", (await supabase.from("settings").select("id").single()).data?.id);
 
       if (error) throw error;
 
       toast({
-        title: "Настройки сохранены",
+        title: "Контакты сохранены",
       });
     } catch (error: any) {
       toast({
@@ -100,47 +81,26 @@ export default function AdminContacts() {
       note: newContact.note,
     };
 
-    const managers = [...(contactInfo.whatsapp_managers || []), contact];
-    const updatedInfo = { ...contactInfo, whatsapp_managers: managers };
-    setContactInfo(updatedInfo);
-    await saveContactInfo(updatedInfo);
+    const updatedContacts = [...contacts, contact];
+    setContacts(updatedContacts);
+    await saveContacts(updatedContacts);
     setNewContact({ name: "", phone: "", note: "" });
     setLoading(false);
   };
 
   const handleDeleteContact = async (id: string) => {
-    const managers = (contactInfo.whatsapp_managers || []).filter((c) => c.id !== id);
-    const updatedInfo = { ...contactInfo, whatsapp_managers: managers };
-    setContactInfo(updatedInfo);
-    await saveContactInfo(updatedInfo);
-  };
-
-  const handleSaveSocialLinks = async () => {
-    setLoading(true);
-    const updatedInfo = {
-      ...contactInfo,
-      whatsapp_group: socialLinks.whatsapp_group || undefined,
-      telegram: socialLinks.telegram || undefined,
-      instagram: socialLinks.instagram || undefined,
-    };
-    setContactInfo(updatedInfo);
-    await saveContactInfo(updatedInfo);
-    setLoading(false);
+    const updatedContacts = contacts.filter((c) => c.id !== id);
+    setContacts(updatedContacts);
+    await saveContacts(updatedContacts);
   };
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <h1 className="text-3xl font-bold">Настройки контактов</h1>
-      <p className="text-muted-foreground">
-        Управляйте контактной информацией, которая будет отображаться пользователям
-      </p>
+      <h1 className="text-3xl font-bold">Контакты</h1>
 
       <Card>
         <CardHeader>
-          <CardTitle>WhatsApp менеджеров ПВЗ</CardTitle>
-          <CardDescription>
-            Добавьте номера телефонов менеджеров. Каждый номер будет отображаться как кликабельная ссылка для WhatsApp.
-          </CardDescription>
+          <CardTitle>Добавить контакт</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
@@ -167,24 +127,26 @@ export default function AdminContacts() {
               id="note"
               value={newContact.note}
               onChange={(e) => setNewContact({ ...newContact, note: e.target.value })}
-              placeholder="Например: Менеджер ПВЗ Нариман"
+              placeholder="Дополнительная информация"
             />
           </div>
           <Button onClick={handleAddContact} disabled={loading}>
             <Plus className="h-4 w-4 mr-2" />
-            Добавить номер
+            Добавить контакт
           </Button>
+        </CardContent>
+      </Card>
 
-          <Separator className="my-4" />
-
+      <Card>
+        <CardHeader>
+          <CardTitle>Список контактов ({contacts.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
           <div className="space-y-3">
-            <p className="text-sm font-medium">
-              Добавленные номера ({contactInfo.whatsapp_managers?.length || 0})
-            </p>
-            {!contactInfo.whatsapp_managers || contactInfo.whatsapp_managers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Номера не добавлены</p>
+            {contacts.length === 0 ? (
+              <p className="text-muted-foreground">Контакты не добавлены</p>
             ) : (
-              contactInfo.whatsapp_managers.map((contact) => (
+              contacts.map((contact) => (
                 <div
                   key={contact.id}
                   className="flex items-start justify-between p-4 border rounded-lg"
@@ -207,47 +169,6 @@ export default function AdminContacts() {
               ))
             )}
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Социальные сети и группы</CardTitle>
-          <CardDescription>
-            Добавьте ссылки на группы и каналы. Оставьте поле пустым, если ссылка не нужна.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label htmlFor="whatsapp_group">Группа WhatsApp</Label>
-            <Input
-              id="whatsapp_group"
-              value={socialLinks.whatsapp_group}
-              onChange={(e) => setSocialLinks({ ...socialLinks, whatsapp_group: e.target.value })}
-              placeholder="https://chat.whatsapp.com/..."
-            />
-          </div>
-          <div>
-            <Label htmlFor="telegram">Телеграм-канал</Label>
-            <Input
-              id="telegram"
-              value={socialLinks.telegram}
-              onChange={(e) => setSocialLinks({ ...socialLinks, telegram: e.target.value })}
-              placeholder="https://t.me/..."
-            />
-          </div>
-          <div>
-            <Label htmlFor="instagram">Instagram</Label>
-            <Input
-              id="instagram"
-              value={socialLinks.instagram}
-              onChange={(e) => setSocialLinks({ ...socialLinks, instagram: e.target.value })}
-              placeholder="https://instagram.com/..."
-            />
-          </div>
-          <Button onClick={handleSaveSocialLinks} disabled={loading}>
-            Сохранить ссылки
-          </Button>
         </CardContent>
       </Card>
     </div>

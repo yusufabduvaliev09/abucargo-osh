@@ -10,7 +10,6 @@ import TelegramAuth from "./pages/TelegramAuth";
 import Dashboard from "./pages/Dashboard";
 import InTransit from "./pages/InTransit";
 import MyPackages from "./pages/MyPackages";
-import Contacts from "./pages/Contacts";
 import Account from "./pages/Account";
 import ChangePassword from "./pages/ChangePassword";
 import AdminUsers from "./pages/admin/Users";
@@ -42,7 +41,6 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/in-transit" element={<InTransit />} />
             <Route path="/my-packages" element={<MyPackages />} />
-            <Route path="/contacts" element={<Contacts />} />
             <Route path="/account" element={<Account />} />
             <Route path="/change-password" element={<ChangePassword />} />
             <Route path="/admin/users" element={<AdminUsers />} />
