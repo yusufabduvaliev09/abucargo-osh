@@ -1,4 +1,4 @@
-import { Home, Package, Truck, LogOut, Users, PackagePlus, Shield, Settings, Scan, MessageSquare } from "lucide-react";
+import { Home, Package, Truck, LogOut, Users, PackagePlus, Shield, Settings, Scan } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   Sidebar,
@@ -37,7 +37,6 @@ export function AppSidebar({ userRole }: AppSidebarProps) {
     { title: "Главное", url: "/dashboard", icon: Home },
     { title: "В дороге", url: "/in-transit", icon: Truck },
     { title: "Мои посылки", url: "/my-packages", icon: Package },
-    { title: "Сообщения и удаления", url: "/messages-deletion", icon: MessageSquare },
     { title: "Контакты", url: "/contacts", icon: Users },
   ];
 

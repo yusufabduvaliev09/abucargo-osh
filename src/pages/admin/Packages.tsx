@@ -1,4 +1,4 @@
-                      import { useState } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,19 +12,6 @@ import { Upload, FileSpreadsheet, CalendarIcon } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import * as XLSX from 'xlsx';
 
-// Функция для валидации международных номеров
-const validateInternationalPhone = (phone: string): boolean => {
-  // Базовая проверка на минимальную длину и допустимые символы
-  const phoneRegex = /^[\+]?[0-9\s\-\(\)\.]{7,}$/;
-  return phoneRegex.test(phone.replace(/\s/g, ''));
-};
-
-// Функция для нормализации номера телефона
-const normalizePhone = (phone: string): string => {
-  // Удаляем все пробелы, дефисы, скобки
-  return phone.replace(/[\s\-\(\)\.]/g, '');
-};
-
 const AdminPackages = () => {
   const [pricePerKg, setPricePerKg] = useState("12.00");
   const [file, setFile] = useState<File | null>(null);
@@ -34,7 +21,6 @@ const AdminPackages = () => {
   const [trackColumn, setTrackColumn] = useState("1");
   const [weightColumn, setWeightColumn] = useState("");
   const [dateColumn, setDateColumn] = useState("");
-  const [phoneColumn, setPhoneColumn] = useState(""); // Новое поле для номера телефона
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [showColumnSelector, setShowColumnSelector] = useState(false);
   const { toast } = useToast();
@@ -51,6 +37,7 @@ const AdminPackages = () => {
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
         
         if (jsonData.length > 0) {
+          // Filter out empty columns like _EMPTY4, _EMPTY5
           const cols = Object.keys(jsonData[0]).filter(col => 
             col && !col.startsWith('__EMPTY') && col.trim() !== ''
           );
@@ -84,9 +71,9 @@ const AdminPackages = () => {
       let successCount = 0;
       let updateCount = 0;
       let skipCount = 0;
-      let invalidPhones: string[] = [];
 
       for (const row of excelData) {
+        // Get values by column index (1-based)
         const rowValues = Object.values(row);
         const trackNumber = String(rowValues[parseInt(trackColumn) - 1] || '').trim();
         
@@ -97,24 +84,6 @@ const AdminPackages = () => {
 
         const packageWeight = weightColumn ? parseFloat(String(rowValues[parseInt(weightColumn) - 1] || '0')) : 0;
         const packageDate = dateColumn ? String(rowValues[parseInt(dateColumn) - 1] || '') : '';
-        
-        // Получаем номер телефона из указанного столбца
-        let phoneNumber = '';
-        if (phoneColumn) {
-          phoneNumber = String(rowValues[parseInt(phoneColumn) - 1] || '').trim();
-          
-          // Валидируем номер телефона, если он указан
-          if (phoneNumber && !validateInternationalPhone(phoneNumber)) {
-            invalidPhones.push(`${trackNumber}: ${phoneNumber}`);
-            skipCount++;
-            continue;
-          }
-          
-          // Нормализуем номер телефона
-          if (phoneNumber) {
-            phoneNumber = normalizePhone(phoneNumber);
-          }
-        }
 
         try {
           // Check if package already exists
@@ -142,11 +111,6 @@ const AdminPackages = () => {
               updateData.total_price = packageWeight * parseFloat(pricePerKg);
             }
             
-            // Обновляем номер телефона, если он указан
-            if (phoneNumber) {
-              updateData.phone = phoneNumber;
-            }
-            
             await supabase
               .from('packages')
               .update(updateData)
@@ -166,11 +130,6 @@ const AdminPackages = () => {
               newPackage.total_price = packageWeight * parseFloat(pricePerKg);
             }
 
-            // Добавляем номер телефона, если он указан
-            if (phoneNumber) {
-              newPackage.phone = phoneNumber;
-            }
-
             await supabase.from('packages').insert([newPackage]);
             successCount++;
           }
@@ -181,16 +140,9 @@ const AdminPackages = () => {
         }
       }
 
-      let description = `Добавлено: ${successCount}, Обновлено: ${updateCount}`;
-      if (skipCount > 0) description += `, Пропущено: ${skipCount}`;
-      if (invalidPhones.length > 0) {
-        description += `. Неверные номера: ${invalidPhones.slice(0, 3).join(', ')}${invalidPhones.length > 3 ? '...' : ''}`;
-      }
-
       toast({
-        title: invalidPhones.length > 0 ? "Есть ошибки" : "Успешно",
-        description,
-        variant: invalidPhones.length > 0 ? "destructive" : "default",
+        title: "Успешно",
+        description: `Добавлено: ${successCount}, Обновлено: ${updateCount}${skipCount > 0 ? `, Пропущено: ${skipCount}` : ''}`,
       });
       
       setFile(null);
@@ -200,7 +152,6 @@ const AdminPackages = () => {
       setTrackColumn("1");
       setWeightColumn("");
       setDateColumn("");
-      setPhoneColumn("");
     } catch (error) {
       toast({
         title: "Ошибка",
@@ -212,7 +163,6 @@ const AdminPackages = () => {
     }
   };
 
-  // Остальной код остается таким же...
   const handleSavePrice = async () => {
     const { data: existingSettings } = await supabase
       .from('settings')
@@ -332,7 +282,7 @@ const AdminPackages = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Номер столбца ВЕС ПОСЫЛКИ (1,2,3)</Label>
+                <Label>Номер столбца КОД КЛИЕНТА (1,2,3)</Label>
                 <Input
                   type="text"
                   value={weightColumn}
@@ -342,27 +292,13 @@ const AdminPackages = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Номер столбца ДАТЫ ОТПРАВКИ (1,2,3)</Label>
+                <Label>Номер столбца ВЕС ПОСЫЛКИ (1,2,3)</Label>
                 <Input
                   type="text"
                   value={dateColumn}
                   onChange={(e) => setDateColumn(e.target.value)}
                   placeholder="Например: 3 (необязательно)"
                 />
-              </div>
-
-              {/* Новое поле для номера телефона */}
-              <div className="space-y-2">
-                <Label>Номер столбца ТЕЛЕФОНА (1,2,3)</Label>
-                <Input
-                  type="text"
-                  value={phoneColumn}
-                  onChange={(e) => setPhoneColumn(e.target.value)}
-                  placeholder="Например: 4 (необязательно)"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Поддерживаются международные номера: +7 (123) 456-7890, +996 555 123456, 447123456789 и т.д.
-                </p>
               </div>
             </div>
           )}
@@ -380,8 +316,7 @@ const AdminPackages = () => {
             <h4 className="font-semibold mb-2">Инструкция:</h4>
             <ul className="text-sm space-y-1 list-disc list-inside">
               <li>Загрузите Excel файл (.xlsx или .xls)</li>
-              <li>Выберите столбцы с трек-кодами, весом, датой отправки и телефоном</li>
-              <li>Номера телефонов могут быть в любом международном формате</li>
+              <li>Выберите столбцы с трек-кодами, весом и датой отправки</li>
               <li>Нажмите "Опубликовать" для добавления данных</li>
               <li>Если трек-код уже существует, обновится статус и дата</li>
             </ul>
