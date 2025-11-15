@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, UserPlus, Upload, Edit, Trash2, UserCog } from "lucide-react";
+import { Search, UserPlus, Upload, Edit, Trash2, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EditUserDialog } from "@/components/EditUserDialog";
 import { AddUserDialog } from "@/components/AddUserDialog";
@@ -213,57 +213,15 @@ const AdminUsers = () => {
     }
   };
 
-  const handleLoginAsUser = async (userId: string, userName: string) => {
-    if (!confirm(`Вы уверены, что хотите войти как ${userName}?`)) return;
-
-    try {
-      // Сохраняем текущую сессию администратора
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        localStorage.setItem('admin_session', JSON.stringify({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token,
-        }));
-        localStorage.setItem('impersonated_user_name', userName);
-      }
-
-      // Вызываем edge function для входа как пользователь
-      const { data, error } = await supabase.functions.invoke('admin-login-as-user', {
-        body: { target_user_id: userId },
-      });
-
-      if (error || data?.error) {
-        throw new Error(error?.message || data?.error || 'Не удалось войти как пользователь');
-      }
-
-      // Используем hashed_token для верификации через OTP
-      const { error: verifyError } = await supabase.auth.verifyOtp({
-        token_hash: data.hashed_token,
-        type: 'magiclink',
-      });
-
-      if (verifyError) throw verifyError;
-
-      toast({
-        title: "Успешно",
-        description: `Вы вошли как ${userName}`,
-      });
-
-      // Перенаправляем на дашборд пользователя
-      setTimeout(() => {
-        window.location.href = '/dashboard';
-      }, 500);
-
-    } catch (error: any) {
-      localStorage.removeItem('admin_session');
-      localStorage.removeItem('impersonated_user_name');
-      
-      toast({
-        title: "Ошибка",
-        description: error.message || "Не удалось войти как пользователь",
-        variant: "destructive",
-      });
-    }
+  const handleWhatsAppClick = (phone: string, userName: string) => {
+    // Очищаем номер телефона от всех нецифровых символов
+    const cleanPhone = phone.replace(/\D/g, '');
+    
+    // Формируем ссылку WhatsApp
+    const whatsappUrl = `https://wa.me/${cleanPhone}`;
+    
+    // Открываем WhatsApp в новом окне
+    window.open(whatsappUrl, '_blank');
   };
 
   const getPvzLabel = (pvz: string) => {
@@ -359,26 +317,26 @@ const AdminUsers = () => {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleLoginAsUser(user.user_id, user.full_name)}
+                              onClick={() => handleWhatsAppClick(user.phone, user.full_name)}
+                              title="Написать в WhatsApp"
                             >
-                              <UserCog className="h-4 w-4 mr-2" />
-                              Войти как пользователь
+                              <MessageCircle className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => setEditingUser(user)}
+                              title="Изменить"
                             >
-                              <Edit className="h-4 w-4 mr-2" />
-                              Изменить
+                              <Edit className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="destructive"
                               size="sm"
                               onClick={() => handleDeleteUser(user.id)}
+                              title="Удалить"
                             >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Удалить
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </TableCell>
