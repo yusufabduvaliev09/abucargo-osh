@@ -82,7 +82,7 @@ const MyPackages = () => {
     if (!newTrackNumber.trim()) {
       toast({
         title: "Ошибка",
-        description: "Введите трек-код",
+        description: "Введите трек-код(ы)",
         variant: "destructive",
       });
       return;
@@ -93,23 +93,44 @@ const MyPackages = () => {
     
     if (!user) return;
 
-    const { error } = await supabase.from('packages').insert([{
-      track_number: newTrackNumber.trim(),
+    // Разделяем введенные трек-коды по запятой и очищаем от пробелов
+    const trackNumbers = newTrackNumber
+      .split(',')
+      .map(track => track.trim())
+      .filter(track => track.length > 0);
+
+    if (trackNumbers.length === 0) {
+      toast({
+        title: "Ошибка",
+        description: "Введите хотя бы один трек-код",
+        variant: "destructive",
+      });
+      setAdding(false);
+      return;
+    }
+
+    // Создаем массив объектов для вставки
+    const packagesToInsert = trackNumbers.map(track_number => ({
+      track_number,
       user_id: user.id,
       status: 'waiting_arrival',
       weight: 0,
-    }]);
+    }));
+
+    const { error } = await supabase
+      .from('packages')
+      .insert(packagesToInsert);
 
     if (error) {
       toast({
         title: "Ошибка",
-        description: "Не удалось добавить трек-код",
+        description: "Не удалось добавить трек-коды",
         variant: "destructive",
       });
     } else {
       toast({
         title: "Успешно",
-        description: "Трек-код добавлен",
+        description: `Добавлено ${trackNumbers.length} трек-код(ов)`,
       });
       setNewTrackNumber("");
       fetchMyPackages();
@@ -168,17 +189,22 @@ const MyPackages = () => {
               </Button>
             </div>
 
-            <div className="flex gap-2">
-              <Input
-                placeholder="Добавить трек-код"
-                value={newTrackNumber}
-                onChange={(e) => setNewTrackNumber(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAddTrackNumber()}
-              />
-              <Button onClick={handleAddTrackNumber} disabled={adding}>
-                <Plus className="h-4 w-4 mr-2" />
-                Добавить
-              </Button>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Добавить трек-коды через запятую (например: 15119918,717181818)"
+                  value={newTrackNumber}
+                  onChange={(e) => setNewTrackNumber(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddTrackNumber()}
+                />
+                <Button onClick={handleAddTrackNumber} disabled={adding}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Добавить
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Можно ввести несколько трек-кодов через запятую
+              </p>
             </div>
           </div>
 
