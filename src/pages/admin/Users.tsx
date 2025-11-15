@@ -108,8 +108,19 @@ const AdminUsers = () => {
       const jsonData = utils.sheet_to_json(worksheet);
 
       let successCount = 0;
+      let updateCount = 0;
       let errorCount = 0;
       const errors: string[] = [];
+
+      // Получаем все существующие пользователи для проверки дубликатов
+      const { data: existingUsers } = await supabase
+        .from("profiles")
+        .select("client_code, id, user_id");
+
+      const existingUsersMap = new Map();
+      existingUsers?.forEach(user => {
+        existingUsersMap.set(user.client_code.toUpperCase(), user);
+      });
 
       for (const row of jsonData as any[]) {
         // Поддержка русских и английских заголовков
@@ -135,7 +146,7 @@ const AdminUsers = () => {
 
         if (!clientCode || !fullName || !phone || !password) {
           errorCount++;
-          errors.push(`Строка ${successCount + errorCount}: отсутствуют обязательные поля (ID, Имя, Телефон, Пароль)`);
+          errors.push(`Строка ${successCount + updateCount + errorCount}: отсутствуют обязательные поля (ID, Имя, Телефон, Пароль)`);
           continue;
         }
 
@@ -150,21 +161,44 @@ const AdminUsers = () => {
         }
 
         try {
-          const { data, error } = await supabase.functions.invoke('create-user', {
-            body: {
-              client_code: clientCode,
-              full_name: fullName,
-              phone: phone,
-              pvz_location: pvzLocation,
-              password: password,
-            },
-          });
+          // Проверяем, существует ли пользователь с таким client_code
+          const existingUser = existingUsersMap.get(clientCode);
 
-          if (error || data?.error) {
-            errorCount++;
-            errors.push(`${clientCode}: ${error?.message || data?.error}`);
+          if (existingUser) {
+            // Обновляем существующего пользователя
+            const { error: updateError } = await supabase
+              .from("profiles")
+              .update({
+                full_name: fullName,
+                phone: phone,
+                pvz_location: pvzLocation,
+              })
+              .eq("id", existingUser.id);
+
+            if (updateError) {
+              errorCount++;
+              errors.push(`${clientCode}: Ошибка обновления - ${updateError.message}`);
+            } else {
+              updateCount++;
+            }
           } else {
-            successCount++;
+            // Создаем нового пользователя
+            const { data, error } = await supabase.functions.invoke('create-user', {
+              body: {
+                client_code: clientCode,
+                full_name: fullName,
+                phone: phone,
+                pvz_location: pvzLocation,
+                password: password,
+              },
+            });
+
+            if (error || data?.error) {
+              errorCount++;
+              errors.push(`${clientCode}: ${error?.message || data?.error}`);
+            } else {
+              successCount++;
+            }
           }
         } catch (error: any) {
           errorCount++;
@@ -172,13 +206,36 @@ const AdminUsers = () => {
         }
       }
 
+      let description = "";
+      if (successCount > 0 && updateCount > 0) {
+        description = `✅ Добавлено: ${successCount}, Обновлено: ${updateCount}`;
+      } else if (successCount > 0) {
+        description = `✅ Добавлено: ${successCount}`;
+      } else if (updateCount > 0) {
+        description = `✅ Обновлено: ${updateCount}`;
+      }
+
+      if (errorCount > 0) {
+        description += `${description ? ', ' : ''}❌ Ошибок: ${errorCount}`;
+      }
+
+      if (!description) {
+        description = "Файл не содержал валидных данных";
+      }
+
       toast({
         title: "Импорт завершён",
-        description: `✅ Импорт завершён успешно. Добавлено: ${successCount}${errorCount > 0 ? `, Ошибок: ${errorCount}` : ''}`,
+        description,
       });
 
       if (errors.length > 0 && errors.length <= 5) {
         console.log('Ошибки импорта:', errors);
+        // Можно также показать ошибки пользователю, если нужно
+        // toast({
+        //   title: "Ошибки импорта",
+        //   description: errors.slice(0, 3).join(', '),
+        //   variant: "destructive",
+        // });
       }
 
       fetchUsers();
