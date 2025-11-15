@@ -128,7 +128,7 @@ const Dashboard = () => {
         addressCompanyName = "御玺";
     }
     
-    return `${companyName}${profile.client_code}\n15727306315\n浙江省金华市义乌市北苑街道春晗四区59栋佑途国际797库\n入库号:${addressCompanyName}${profile.client_code}`;
+    return `${companyName}${profile.client_code}\n15727306315\n浙江省金华市义乌市北苑街道春晗四区59栋佑途国际797库入库号:${addressCompanyName}${profile.client_code}`;
   };
 
   const copyAddress = async () => {
