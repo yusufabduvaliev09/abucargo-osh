@@ -50,7 +50,7 @@ serve(async (req) => {
       )
     }
 
-    // Create admin client for user creation
+    // Create admin client for operations
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -62,6 +62,58 @@ serve(async (req) => {
       }
     )
 
+    // 🔥 ВРЕМЕННАЯ ФУНКЦИЯ: УДАЛЕНИЕ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
+    // Добавьте параметр ?action=deleteAll в URL для активации
+    const url = new URL(req.url)
+    if (url.searchParams.get('action') === 'deleteAll') {
+      // Удаляем всех пользователей из profiles
+      const { data: profilesData, error: profilesError } = await supabaseAdmin
+        .from('profiles')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000')
+
+      if (profilesError) {
+        return new Response(
+          JSON.stringify({ error: `Ошибка удаления profiles: ${profilesError.message}` }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        )
+      }
+
+      // Получаем всех пользователей auth для удаления
+      const { data: authUsers, error: authListError } = await supabaseAdmin.auth.admin.listUsers()
+      
+      if (authListError) {
+        return new Response(
+          JSON.stringify({ error: `Ошибка получения пользователей auth: ${authListError.message}` }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        )
+      }
+
+      // Удаляем каждого пользователя из auth (кроме текущего админа)
+      let deletedAuthCount = 0
+      for (const authUser of authUsers.users) {
+        if (authUser.id !== user.id) { // Не удаляем текущего админа
+          const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(authUser.id)
+          if (!deleteError) {
+            deletedAuthCount++
+          }
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          success: true,
+          message: `Удалено ${deletedAuthCount} пользователей из auth и все записи из profiles`,
+          deleted_auth_users: deletedAuthCount
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200 
+        }
+      )
+    }
+
+    // ОРИГИНАЛЬНЫЙ КОД СОЗДАНИЯ ПОЛЬЗОВАТЕЛЯ
     const { client_code, full_name, phone, pvz_location, password } = await req.json()
 
     if (!client_code || !full_name || !phone || !pvz_location || !password) {
