@@ -5,8 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Camera, Plus, Copy, MessageCircle, Trash2 } from "lucide-react";
-import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
+import { Camera, Plus, Copy, MessageCircle, Trash2, CameraOff } from "lucide-react";
+import { Html5Qrcode } from "html5-qrcode";
 
 type PvzLocation = "nariman" | "zhiydalik" | "dostuk";
 
@@ -23,6 +23,19 @@ const PVZ_ADDRESSES = {
   dostuk: "Достук"
 };
 
+// Список поддерживаемых форматов штрих-кодов (только 1D штрих-коды)
+const BARCODE_FORMATS = [
+  Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.CODE_39,
+  Html5QrcodeSupportedFormats.CODE_93,
+  Html5QrcodeSupportedFormats.EAN_13,
+  Html5QrcodeSupportedFormats.EAN_8,
+  Html5QrcodeSupportedFormats.UPC_A,
+  Html5QrcodeSupportedFormats.UPC_E,
+  Html5QrcodeSupportedFormats.ITF,
+  Html5QrcodeSupportedFormats.CODABAR
+];
+
 export default function Scanner() {
   const [pvz, setPvz] = useState<PvzLocation>("nariman");
   const [codes, setCodes] = useState<string[]>([]);
@@ -31,27 +44,30 @@ export default function Scanner() {
   const [clientData, setClientData] = useState<ClientProfile | null>(null);
   const [weight, setWeight] = useState("");
   const [pricePerKg, setPricePerKg] = useState("250");
+  const [isScanning, setIsScanning] = useState(false);
+  const [isCameraLoading, setIsCameraLoading] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isInIframe, setIsInIframe] = useState(false);
 
-const readerId = "qr-reader";
-const [isInIframe, setIsInIframe] = useState(false);
-const { status: scannerStatus, errorMessage, start, stop } = useBarcodeScanner({
-  readerId,
-  scanDelayMs: 300,
-  blockInIframe: true,
-  onScan: (decodedText: string) => {
-    setCodes((prev) => (prev.includes(decodedText) ? prev : [...prev, decodedText]));
-    if (navigator.vibrate) {
-      navigator.vibrate(150);
-    }
-    toast({
-      title: "✓ Трек-код добавлен",
-      description: decodedText,
-    });
-  },
-});
-const isActive = scannerStatus === "active";
+  const qrScannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerDivId = "qr-reader";
+  const lastScannedRef = useRef<string>("");
+  const lastScanTimeRef = useRef<number>(0);
 
   const { toast } = useToast();
+
+  // Очистка сканера
+  const cleanupScanner = async () => {
+    try {
+      if (qrScannerRef.current) {
+        await qrScannerRef.current.stop();
+        await qrScannerRef.current.clear();
+        qrScannerRef.current = null;
+      }
+    } catch (err) {
+      console.error("Cleanup error:", err);
+    }
+  };
 
   // -------------------- CLIENT FETCH --------------------
   const getClientCode = (id: string, pvzLocation: PvzLocation): string => {
@@ -66,7 +82,6 @@ const isActive = scannerStatus === "active";
     }
 
     const clientCode = getClientCode(id, pvz);
-
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
@@ -90,88 +105,176 @@ const isActive = scannerStatus === "active";
     if (clientId) fetchClientData(clientId);
   }, [clientId, pvz]);
 
-  // -------------------- CAMERA START --------------------
-const startScanning = async () => {
-  try {
-    if (scannerStatus === "active") return;
+  // -------------------- FAST BARCODE SCANNING --------------------
+  const startScanning = async () => {
+    if (isScanning) return;
+    
+    setIsCameraLoading(true);
+    setCameraError(null);
 
-    // Блокировка камеры в iframe
     try {
-      const inIframe = window.self !== window.top;
-      setIsInIframe(inIframe);
-      if (inIframe) {
+      // Проверка iframe
+      try {
+        const inIframe = window.self !== window.top;
+        setIsInIframe(inIframe);
+        if (inIframe) {
+          toast({
+            title: "Камера недоступна в режиме предпросмотра",
+            description: "Откройте приложение в новой вкладке",
+            variant: "destructive",
+          });
+          setIsCameraLoading(false);
+          return;
+        }
+      } catch {
+        setIsInIframe(true);
         toast({
-          title: "Камера недоступна в режиме предпросмотра",
+          title: "Камера недоступна",
           description: "Откройте приложение в новой вкладке",
           variant: "destructive",
         });
+        setIsCameraLoading(false);
         return;
       }
-    } catch {
-      setIsInIframe(true);
+
+      await cleanupScanner();
+
+      const html5Qr = new Html5Qrcode(scannerDivId, {
+        formatsToSupport: BARCODE_FORMATS // Только штрих-коды
+      });
+      qrScannerRef.current = html5Qr;
+
+      // Конфигурация для быстрого сканирования
+      const config = {
+        fps: 30, // Высокий FPS для быстрого сканирования
+        qrbox: { width: 300, height: 150 }, // Широкий прямоугольник для штрих-кодов
+        aspectRatio: 1.7777778, // 16:9 для лучшего охвата
+        disableFlip: false
+      };
+
+      await html5Qr.start(
+        { facingMode: "environment" },
+        config,
+        (decodedText) => {
+          const now = Date.now();
+          const timeSinceLastScan = now - lastScanTimeRef.current;
+          
+          // Быстрое сканирование с минимальной задержкой
+          if (!codes.includes(decodedText) && 
+              (decodedText !== lastScannedRef.current || timeSinceLastScan > 500)) {
+            
+            setCodes((prev) => [...prev, decodedText]);
+            lastScannedRef.current = decodedText;
+            lastScanTimeRef.current = now;
+            
+            // Короткая вибрация (если доступна)
+            if (navigator.vibrate) {
+              navigator.vibrate(50);
+            }
+            
+            toast({
+              title: "✓ Штрих-код добавлен",
+              description: decodedText,
+            });
+          }
+        },
+        (error) => {
+          // Игнорируем ошибки парсинга QR-кодов (нас интересуют только штрих-коды)
+          if (!error.includes("No multi format readers configured") && 
+              !error.includes("QR code")) {
+            console.warn("Barcode scanner warning:", error);
+          }
+        }
+      );
+
+      setIsScanning(true);
       toast({
-        title: "Камера недоступна",
-        description: "Откройте приложение в новой вкладке",
+        title: "Сканирование активно",
+        description: "Наведите камеру на штрих-код",
+      });
+
+    } catch (err: any) {
+      console.error("Scanner start error:", err);
+      const errorMsg = err?.message?.includes("NotAllowedError")
+        ? "Доступ к камере запрещен. Разрешите доступ в настройках браузера."
+        : err?.message?.includes("NotFoundError")
+        ? "Камера не найдена. Убедитесь, что камера подключена и доступна."
+        : "Не удалось запустить камеру. Проверьте разрешения.";
+      
+      setCameraError(errorMsg);
+      toast({
+        title: "Ошибка камеры",
+        description: errorMsg,
         variant: "destructive",
       });
-      return;
+    } finally {
+      setIsCameraLoading(false);
     }
-
-    toast({
-      title: "Запрос доступа к камере...",
-      description: "Разрешите доступ в диалоге браузера",
-    });
-
-    await start();
-
-    toast({
-      title: "Сканирование активно",
-      description: "Наведите камеру на штрих-код",
-    });
-  } catch (err: any) {
-    console.error("Scanner start error:", err);
-    toast({
-      title: "Ошибка запуска сканера",
-      description: errorMessage || err?.message || "Не удалось запустить камеру",
-      variant: "destructive",
-    });
-  }
-};
+  };
 
   // -------------------- CAMERA STOP --------------------
-const stopScanning = async () => {
-  try {
-    await stop();
-  } catch (e) {
-    console.error("Stop error:", e);
-  }
-};
-
-useEffect(() => {
-  try {
-    setIsInIframe(window.self !== window.top);
-  } catch {
-    setIsInIframe(true);
-  }
-  return () => {
-    stop().catch(() => {});
+  const stopScanning = async () => {
+    try {
+      setIsCameraLoading(true);
+      await cleanupScanner();
+      setIsScanning(false);
+      toast({
+        title: "Сканирование остановлено",
+      });
+    } catch (err) {
+      console.error("Stop error:", err);
+    } finally {
+      setIsCameraLoading(false);
+    }
   };
-}, [stop]);
+
+  const toggleCamera = () => {
+    if (isScanning) {
+      stopScanning();
+    } else {
+      startScanning();
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanupScanner();
+    };
+  }, []);
+
+  // Detect iframe on mount
+  useEffect(() => {
+    try {
+      setIsInIframe(window.self !== window.top);
+    } catch {
+      setIsInIframe(true);
+    }
+  }, []);
 
   // -------------------- MANUAL CODE --------------------
   const addManualCode = () => {
-    if (manualCode.trim() && !codes.includes(manualCode.trim())) {
-      setCodes((prev) => [...prev, manualCode.trim()]);
+    const code = manualCode.trim();
+    if (code && !codes.includes(code)) {
+      setCodes((prev) => [...prev, code]);
       setManualCode("");
       toast({
-        title: "Трек-код добавлен",
-        description: manualCode.trim(),
+        title: "Штрих-код добавлен",
+        description: code,
       });
     }
   };
 
   const removeCode = (codeToRemove: string) => {
     setCodes((prev) => prev.filter((code) => code !== codeToRemove));
+  };
+
+  const clearAllCodes = () => {
+    setCodes([]);
+    toast({
+      title: "Список очищен",
+      description: "Все штрих-коды удалены",
+    });
   };
 
   // -------------------- PRICE --------------------
@@ -182,10 +285,30 @@ useEffect(() => {
     ? `Здравствуйте, уважаемый(ая) ${clientData.client_code} 📦
 Ваши посылки прибыли:
 ${codes.map((c, i) => `${i + 1}. ${c}`).join("\n")}
+(${codes.length} шт)
 Вес: ${weight} кг
 Итого: ${totalPrice} сом
-Адрес: ${PVZ_ADDRESSES[pvz]}`
+Адрес: ${PVZ_ADDRESSES[pvz]}
+График: 9:00–21:00
+Оплата: Мбанк 552820112 (ДИЛНОЗА)
+Забрать в течение 5 дней.`
     : "";
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(whatsappMessage);
+      toast({
+        title: "Скопировано",
+        description: "Сообщение скопировано в буфер",
+      });
+    } catch (err) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось скопировать",
+        variant: "destructive",
+      });
+    }
+  };
 
   const openWhatsApp = () => {
     if (!clientData) return;
@@ -194,18 +317,20 @@ ${codes.map((c, i) => `${i + 1}. ${c}`).join("\n")}
     window.open(url, "_blank");
   };
 
-  // -------------------- UI --------------------
-
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <h1 className="text-3xl font-bold">Сканер посылок</h1>
+    <div className="container mx-auto p-4 space-y-4">
+      <h1 className="text-2xl font-bold text-center">Сканер посылок</h1>
 
       {/* ПВЗ */}
       <Card>
-        <CardHeader><CardTitle>Выбор ПВЗ</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Выбор ПВЗ</CardTitle>
+        </CardHeader>
         <CardContent>
           <Select value={pvz} onValueChange={(v) => setPvz(v as PvzLocation)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="nariman">Нариман</SelectItem>
               <SelectItem value="zhiydalik">Жыйдалик УПТК</SelectItem>
@@ -219,83 +344,143 @@ ${codes.map((c, i) => `${i + 1}. ${c}`).join("\n")}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span>Сканирование трек-кодов</span>
-            {scannerStatus === "active" && (
-              <span className="text-sm font-normal text-primary animate-pulse">● Сканирую...</span>
+            <span>Сканирование штрих-кодов</span>
+            {isScanning && (
+              <span className="text-sm font-normal text-green-600 animate-pulse">
+                ● Сканирую...
+              </span>
             )}
-            {scannerStatus === "requesting" && (
-              <span className="text-sm font-normal text-muted-foreground">⏳ Запрос разрешения...</span>
+            {isCameraLoading && (
+              <span className="text-sm font-normal text-yellow-600">
+                ⏳ Загрузка камеры...
+              </span>
             )}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-{!isActive ? (
-              <Button onClick={startScanning} disabled={scannerStatus === "requesting"} className="w-full">
-                <Camera className="h-4 w-4 mr-2" /> 
-                {scannerStatus === "requesting" ? "Разрешите доступ к камере..." : "Открыть камеру"}
-              </Button>
-            ) : (
-              <Button variant="destructive" onClick={stopScanning} className="w-full">
-                Остановить камеру
-              </Button>
+          <div className="space-y-3">
+            {/* Кнопка управления камерой */}
+            <Button
+              onClick={toggleCamera}
+              variant={isScanning ? "destructive" : "default"}
+              disabled={isCameraLoading}
+              className="w-full"
+            >
+              {isCameraLoading ? (
+                "Загрузка..."
+              ) : isScanning ? (
+                <>
+                  <CameraOff className="h-4 w-4 mr-2" />
+                  Остановить камеру
+                </>
+              ) : (
+                <>
+                  <Camera className="h-4 w-4 mr-2" />
+                  Открыть камеру
+                </>
+              )}
+            </Button>
+
+            {/* Сообщения об ошибках */}
+            {(cameraError || isInIframe) && (
+              <div className="p-3 bg-destructive/10 border border-destructive rounded-lg">
+                <p className="text-destructive font-medium text-sm">
+                  Не удалось запустить камеру
+                </p>
+                <p className="text-destructive text-xs mt-1">
+                  {cameraError || "Режим предпросмотра блокирует камеру. Откройте приложение в новой вкладке."}
+                </p>
+              </div>
             )}
-            
-{(scannerStatus === "error" || isInIframe) && (
-              <div className="text-sm text-destructive p-3 bg-destructive/10 rounded-md">
-                <p className="font-semibold">Не удалось запустить камеру</p>
-                <p className="mt-1">{errorMessage || (isInIframe ? "Режим предпросмотра блокирует камеру. Откройте приложение в новой вкладке." : "Проверьте разрешения камеры в настройках браузера")}</p>
+
+            {/* Область сканирования */}
+            {(isScanning || isCameraLoading) && (
+              <div className="border-2 border-primary rounded-lg overflow-hidden bg-black">
+                <div 
+                  id={scannerDivId} 
+                  className="w-full"
+                  style={{ minHeight: '250px' }}
+                />
+                <div className="p-3 bg-primary/10 text-center text-sm">
+                  <p className="text-primary font-medium">
+                    Наведите камеру на штрих-код
+                  </p>
+                  <p className="text-muted-foreground text-xs mt-1">
+                    CODE_128, CODE_39, EAN_13
+                  </p>
+                </div>
               </div>
             )}
           </div>
 
-          {(scannerStatus === "requesting" || isActive) && (
-            <div className="border-2 border-primary rounded-lg overflow-hidden bg-black">
-              <div id={readerId} className="w-full" />
-              <div className="p-3 bg-primary/10 text-center text-sm">
-                <p className="text-primary font-medium">Наведите камеру на штрих-код посылки</p>
-                <p className="text-muted-foreground text-xs mt-1">CODE_128, CODE_39, EAN_13</p>
+          {/* Ввод вручную */}
+          <div className="flex gap-2">
+            <Input
+              placeholder="Введите штрих-код вручную"
+              value={manualCode}
+              onChange={(e) => setManualCode(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addManualCode()}
+              className="flex-1"
+            />
+            <Button onClick={addManualCode} size="icon">
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Список отсканированных кодов */}
+          {codes.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">
+                  Отсканировано: {codes.length} шт
+                </span>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={clearAllCodes}
+                >
+                  Очистить все
+                </Button>
+              </div>
+              <div className="max-h-40 overflow-y-auto space-y-2">
+                {codes.map((code, index) => (
+                  <div
+                    key={`${code}-${index}`}
+                    className="flex items-center justify-between bg-secondary p-2 rounded-lg"
+                  >
+                    <span className="font-mono text-sm">{code}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeCode(code)}
+                      className="h-6 w-6"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
               </div>
             </div>
           )}
-
-          {/* Ввод вручную */}
-          <Input
-            placeholder="Введите трек-код"
-            value={manualCode}
-            onChange={(e) => setManualCode(e.target.value)}
-          />
-          <Button onClick={addManualCode}>
-            <Plus className="h-4 w-4 mr-2" /> Добавить
-          </Button>
-
-          {/* Список */}
-          {codes.length > 0 &&
-            codes.map((code) => (
-              <div key={code} className="flex justify-between">
-                <span>{code}</span>
-                <Button variant="ghost" size="icon" onClick={() => removeCode(code)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
         </CardContent>
       </Card>
 
       {/* Клиент */}
       <Card>
-        <CardHeader><CardTitle>Клиент</CardTitle></CardHeader>
-        <CardContent>
+        <CardHeader>
+          <CardTitle>Клиент</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
           <Input
             value={clientId}
             onChange={(e) => setClientId(e.target.value)}
             placeholder="Введите ID клиента"
           />
           {clientData && (
-            <div className="p-4 bg-muted rounded mt-4">
-              <p>Имя: {clientData.full_name}</p>
-              <p>Телефон: {clientData.phone}</p>
-              <p>Клиент-код: {clientData.client_code}</p>
+            <div className="p-3 bg-muted rounded-lg space-y-2">
+              <p className="font-medium">Имя: {clientData.full_name}</p>
+              <p className="text-sm">Телефон: {clientData.phone}</p>
+              <p className="text-sm font-mono">Клиент-код: {clientData.client_code}</p>
             </div>
           )}
         </CardContent>
@@ -303,40 +488,58 @@ ${codes.map((c, i) => `${i + 1}. ${c}`).join("\n")}
 
       {/* Цена */}
       <Card>
-        <CardHeader><CardTitle>Стоимость</CardTitle></CardHeader>
-        <CardContent className="space-y-2">
+        <CardHeader>
+          <CardTitle>Стоимость</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
           <Input
             type="number"
-            placeholder="Вес"
+            placeholder="Вес (кг)"
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
           />
           <Select value={pricePerKg} onValueChange={setPricePerKg}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue placeholder="Цена за кг" />
+            </SelectTrigger>
             <SelectContent>
-              <SelectItem value="250">250</SelectItem>
-              <SelectItem value="240">240</SelectItem>
+              <SelectItem value="250">250 сом/кг</SelectItem>
+              <SelectItem value="240">240 сом/кг</SelectItem>
             </SelectContent>
           </Select>
-
           {weight && (
-            <p className="text-xl font-bold">Итого: {totalPrice} сом</p>
+            <div className="p-3 bg-primary/10 rounded-lg">
+              <p className="text-xl font-bold text-center">
+                Итого: {totalPrice} сом
+              </p>
+            </div>
           )}
         </CardContent>
       </Card>
 
       {/* WhatsApp */}
-      {clientData && (
+      {clientData && codes.length > 0 && (
         <Card>
-          <CardHeader><CardTitle>Сообщение</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Отправка клиенту</CardTitle>
+          </CardHeader>
           <CardContent className="space-y-4">
-            <pre className="p-4 bg-muted rounded whitespace-pre-wrap">{whatsappMessage}</pre>
-            <Button onClick={openWhatsApp}>
-              <MessageCircle className="h-4 w-4 mr-2" /> Открыть WhatsApp
-            </Button>
+            <div className="p-3 bg-muted rounded-lg">
+              <pre className="whitespace-pre-wrap text-sm">{whatsappMessage}</pre>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Button onClick={copyToClipboard} variant="outline">
+                <Copy className="h-4 w-4 mr-2" />
+                Копировать
+              </Button>
+              <Button onClick={openWhatsApp}>
+                <MessageCircle className="h-4 w-4 mr-2" />
+                WhatsApp
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
     </div>
   );
-        }
+    }
