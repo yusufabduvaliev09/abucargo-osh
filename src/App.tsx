@@ -12,11 +12,13 @@ import InTransit from "./pages/InTransit";
 import MyPackages from "./pages/MyPackages";
 import Account from "./pages/Account";
 import ChangePassword from "./pages/ChangePassword";
+import Contacts from "./pages/Contacts";
 import AdminUsers from "./pages/admin/Users";
 import AdminPackages from "./pages/admin/Packages";
 import AdminRoles from "./pages/admin/Roles";
 import AdminSettings from "./pages/admin/Settings";
 import AdminContacts from "./pages/admin/Contacts";
+import AdminScanner from "./pages/admin/Scanner";
 import CreateAdmin from "./pages/admin/CreateAdmin";
 import InitAdmin from "./pages/InitAdmin";
 import NotFound from "./pages/NotFound";
@@ -43,8 +45,10 @@ const App = () => (
             <Route path="/my-packages" element={<MyPackages />} />
             <Route path="/account" element={<Account />} />
             <Route path="/change-password" element={<ChangePassword />} />
+            <Route path="/contacts" element={<Contacts />} />
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/packages" element={<AdminPackages />} />
+            <Route path="/admin/scanner" element={<AdminScanner />} />
             <Route path="/admin/roles" element={<AdminRoles />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
             <Route path="/admin/contacts" element={<AdminContacts />} />
