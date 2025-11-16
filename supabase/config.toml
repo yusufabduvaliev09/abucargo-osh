@@ -14,3 +14,6 @@ verify_jwt = true
 
 [functions.create-user]
 verify_jwt = true
+
+[functions.delete-all-users]
+verify_jwt = true

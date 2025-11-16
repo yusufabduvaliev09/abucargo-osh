@@ -18,11 +18,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, UserPlus, Upload, Edit, Trash2, MessageCircle } from "lucide-react";
+import { Search, UserPlus, Upload, Edit, Trash2, MessageCircle, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EditUserDialog } from "@/components/EditUserDialog";
 import { AddUserDialog } from "@/components/AddUserDialog";
 import { read, utils } from 'xlsx';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface User {
   id: string;
@@ -41,6 +51,8 @@ const AdminUsers = () => {
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -290,6 +302,38 @@ const AdminUsers = () => {
     }
   };
 
+  const handleDeleteAllUsers = async () => {
+    setIsDeleting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-all-users');
+      
+      if (error) {
+        console.error('Error deleting all users:', error);
+        toast({
+          title: "Ошибка",
+          description: "Не удалось удалить пользователей",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Успешно",
+          description: data.message || "Все пользователи успешно удалены",
+        });
+        fetchUsers();
+      }
+    } catch (error) {
+      console.error('Unexpected error:', error);
+      toast({
+        title: "Ошибка",
+        description: "Произошла непредвиденная ошибка",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteAllDialog(false);
+    }
+  };
+
   return (
     <div className="container mx-auto p-6">
       <Card>
@@ -421,6 +465,35 @@ const AdminUsers = () => {
           onSuccess={fetchUsers}
         />
       )}
+
+      <AlertDialog open={showDeleteAllDialog} onOpenChange={setShowDeleteAllDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Удалить всех пользователей?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p className="font-semibold text-destructive">
+                Вы уверены, что хотите удалить ВСЕХ пользователей?
+              </p>
+              <p>
+                Это действие необратимо! Все пользователи (кроме вас) будут удалены из системы вместе со всеми их данными.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteAllUsers}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? "Удаление..." : "Да, удалить всех"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
