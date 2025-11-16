@@ -33,6 +33,7 @@ export default function Scanner() {
   const [pricePerKg, setPricePerKg] = useState("250");
 
   const [isScanning, setIsScanning] = useState(false);
+  const [scannerStatus, setScannerStatus] = useState<"idle" | "requesting" | "active" | "error">("idle");
   const [lastScannedCode, setLastScannedCode] = useState("");
   const [lastScanTime, setLastScanTime] = useState(0);
 
@@ -83,53 +84,110 @@ export default function Scanner() {
     try {
       if (isScanning) return;
 
-      const permissions = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (!permissions) {
+      // Проверка поддержки браузером
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         toast({
-          title: "Ошибка",
-          description: "Нет доступа к камере",
+          title: "Браузер не поддерживает камеру",
+          description: "Используйте современный браузер (Chrome, Firefox, Safari)",
           variant: "destructive",
         });
+        setScannerStatus("error");
         return;
       }
 
-      const scanner = new Html5Qrcode(readerId, {
-        formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.QR_CODE],
+      setScannerStatus("requesting");
+      toast({
+        title: "Запрос доступа к камере...",
+        description: "Разрешите доступ в диалоге браузера",
       });
 
+      // Запрашиваем разрешение на камеру
+      try {
+        await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            facingMode: "environment",
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          } 
+        });
+      } catch (permError: any) {
+        let errorMessage = "Не удалось получить доступ к камере";
+        
+        if (permError.name === "NotAllowedError" || permError.name === "PermissionDeniedError") {
+          errorMessage = "Доступ к камере запрещен. Разрешите доступ в настройках браузера.";
+        } else if (permError.name === "NotFoundError") {
+          errorMessage = "Камера не найдена на устройстве";
+        } else if (permError.name === "NotReadableError") {
+          errorMessage = "Камера занята другим приложением";
+        }
+        
+        toast({
+          title: "Ошибка доступа к камере",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        setScannerStatus("error");
+        return;
+      }
+
+      // Инициализируем сканер с поддержкой нужных форматов
+      const scanner = new Html5Qrcode(readerId, {
+        verbose: false,
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.QR_CODE,
+        ]
+      });
       scannerRef.current = scanner;
 
       await scanner.start(
         { facingMode: "environment" },
         {
           fps: 10,
-          qrbox: { width: 250, height: 250 },
+          qrbox: { width: 300, height: 150 },
         },
         (decodedText) => {
           const now = Date.now();
 
-          if (decodedText !== lastScannedCode || now - lastScanTime > 2500) {
+          if (decodedText !== lastScannedCode || now - lastScanTime > 2300) {
             if (!codes.includes(decodedText)) {
               setCodes((prev) => [...prev, decodedText]);
               setLastScannedCode(decodedText);
               setLastScanTime(now);
 
+              // Вибрация при успехе (если поддерживается)
+              if (navigator.vibrate) {
+                navigator.vibrate(200);
+              }
+
               toast({
-                title: "Трек-код добавлен",
+                title: "✓ Трек-код добавлен",
                 description: decodedText,
               });
             }
           }
+        },
+        (errorMessage) => {
+          // Игнорируем ошибки сканирования (они происходят постоянно пока нет кода в кадре)
         }
       );
 
       setIsScanning(true);
-    } catch (error) {
+      setScannerStatus("active");
       toast({
-        title: "Ошибка",
-        description: "Не удалось открыть камеру",
+        title: "Сканирование активно",
+        description: "Наведите камеру на штрих-код",
+      });
+    } catch (error: any) {
+      console.error("Scanner error:", error);
+      toast({
+        title: "Ошибка запуска сканера",
+        description: error?.message || "Не удалось запустить сканер",
         variant: "destructive",
       });
+      setScannerStatus("error");
     }
   };
 
@@ -144,6 +202,7 @@ export default function Scanner() {
       console.error("Stop error:", e);
     }
     setIsScanning(false);
+    setScannerStatus("idle");
   };
 
   useEffect(() => {
@@ -213,22 +272,46 @@ ${codes.map((c, i) => `${i + 1}. ${c}`).join("\n")}
 
       {/* Сканер */}
       <Card>
-        <CardHeader><CardTitle>Сканирование трек-кодов</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Сканирование трек-кодов</span>
+            {scannerStatus === "active" && (
+              <span className="text-sm font-normal text-primary animate-pulse">● Сканирую...</span>
+            )}
+            {scannerStatus === "requesting" && (
+              <span className="text-sm font-normal text-muted-foreground">⏳ Запрос разрешения...</span>
+            )}
+          </CardTitle>
+        </CardHeader>
         <CardContent className="space-y-4">
-          {isScanning && (
-            <div className="border-2 border-primary rounded-lg p-4 bg-muted/50">
-              <div id={readerId} className="w-full" />
-            </div>
-          )}
+          <div className="space-y-2">
+            {!isScanning ? (
+              <Button onClick={startScanning} disabled={scannerStatus === "requesting"} className="w-full">
+                <Camera className="h-4 w-4 mr-2" /> 
+                {scannerStatus === "requesting" ? "Разрешите доступ к камере..." : "Открыть камеру"}
+              </Button>
+            ) : (
+              <Button variant="destructive" onClick={stopScanning} className="w-full">
+                Остановить камеру
+              </Button>
+            )}
+            
+            {scannerStatus === "error" && (
+              <div className="text-sm text-destructive p-3 bg-destructive/10 rounded-md">
+                <p className="font-semibold">Не удалось запустить камеру</p>
+                <p className="mt-1">Проверьте разрешения камеры в настройках браузера</p>
+              </div>
+            )}
+          </div>
 
-          {!isScanning ? (
-            <Button onClick={startScanning}>
-              <Camera className="h-4 w-4 mr-2" /> Открыть камеру
-            </Button>
-          ) : (
-            <Button variant="destructive" onClick={stopScanning}>
-              Остановить камеру
-            </Button>
+          {isScanning && (
+            <div className="border-2 border-primary rounded-lg overflow-hidden bg-black">
+              <div id={readerId} className="w-full" />
+              <div className="p-3 bg-primary/10 text-center text-sm">
+                <p className="text-primary font-medium">Наведите камеру на штрих-код посылки</p>
+                <p className="text-muted-foreground text-xs mt-1">CODE_128, CODE_39, EAN_13</p>
+              </div>
+            </div>
           )}
 
           {/* Ввод вручную */}
