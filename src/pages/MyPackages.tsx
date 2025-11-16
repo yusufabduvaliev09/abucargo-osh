@@ -113,7 +113,7 @@ const MyPackages = () => {
     const packagesToInsert = trackNumbers.map(track_number => ({
       track_number,
       user_id: user.id,
-      status: 'waiting_arrival',
+      status: 'waiting_arrival' as const,
       weight: 0,
     }));
 
