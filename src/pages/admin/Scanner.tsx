@@ -33,6 +33,8 @@ export default function Scanner() {
   const [pricePerKg, setPricePerKg] = useState("250");
   const [isScanning, setIsScanning] = useState(false);
   const [html5QrCode, setHtml5QrCode] = useState<Html5Qrcode | null>(null);
+  const [lastScannedCode, setLastScannedCode] = useState("");
+  const [lastScanTime, setLastScanTime] = useState(0);
   const { toast } = useToast();
 
   const getClientCode = (id: string, pvzLocation: PvzLocation): string => {
@@ -85,12 +87,18 @@ export default function Scanner() {
           qrbox: { width: 250, height: 250 },
         },
         (decodedText) => {
-          if (!codes.includes(decodedText)) {
-            setCodes((prev) => [...prev, decodedText]);
-            toast({
-              title: "Трек-код добавлен",
-              description: decodedText,
-            });
+          const now = Date.now();
+          // Проверка задержки 2.5 секунды между сканированиями
+          if (decodedText !== lastScannedCode || now - lastScanTime > 2500) {
+            if (!codes.includes(decodedText)) {
+              setCodes((prev) => [...prev, decodedText]);
+              setLastScannedCode(decodedText);
+              setLastScanTime(now);
+              toast({
+                title: "Трек-код добавлен",
+                description: decodedText,
+              });
+            }
           }
         },
         () => {}
@@ -202,7 +210,11 @@ ${codes.map((code, i) => `${i + 1}. ${code}`).join("\n")}
           <CardTitle>Сканирование трек-кодов</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div id="reader" className={isScanning ? "block" : "hidden"} />
+          {isScanning && (
+            <div className="border-2 border-primary rounded-lg p-4 bg-muted/50">
+              <div id="reader" className="w-full" />
+            </div>
+          )}
           
           <div className="flex gap-2">
             {!isScanning ? (
