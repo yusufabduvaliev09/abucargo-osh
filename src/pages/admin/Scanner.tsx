@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Camera, Plus, Copy, MessageCircle, Trash2 } from "lucide-react";
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
+import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 
 type PvzLocation = "nariman" | "zhiydalik" | "dostuk";
 
@@ -32,13 +32,24 @@ export default function Scanner() {
   const [weight, setWeight] = useState("");
   const [pricePerKg, setPricePerKg] = useState("250");
 
-  const [isScanning, setIsScanning] = useState(false);
-  const [scannerStatus, setScannerStatus] = useState<"idle" | "requesting" | "active" | "error">("idle");
-  const [lastScannedCode, setLastScannedCode] = useState("");
-  const [lastScanTime, setLastScanTime] = useState(0);
-
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const readerId = "qr-reader";
+const readerId = "qr-reader";
+const [isInIframe, setIsInIframe] = useState(false);
+const { status: scannerStatus, errorMessage, start, stop } = useBarcodeScanner({
+  readerId,
+  scanDelayMs: 2000,
+  blockInIframe: true,
+  onScan: (decodedText: string) => {
+    setCodes((prev) => (prev.includes(decodedText) ? prev : [...prev, decodedText]));
+    if (navigator.vibrate) {
+      navigator.vibrate(150);
+    }
+    toast({
+      title: "✓ Трек-код добавлен",
+      description: decodedText,
+    });
+  },
+});
+const isActive = scannerStatus === "active";
 
   const { toast } = useToast();
 
@@ -80,138 +91,72 @@ export default function Scanner() {
   }, [clientId, pvz]);
 
   // -------------------- CAMERA START --------------------
-  const startScanning = async () => {
+const startScanning = async () => {
+  try {
+    if (scannerStatus === "active") return;
+
+    // Блокировка камеры в iframe
     try {
-      if (isScanning) return;
-
-      // Проверка поддержки браузером
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      const inIframe = window.self !== window.top;
+      setIsInIframe(inIframe);
+      if (inIframe) {
         toast({
-          title: "Браузер не поддерживает камеру",
-          description: "Используйте современный браузер (Chrome, Firefox, Safari)",
+          title: "Камера недоступна в режиме предпросмотра",
+          description: "Откройте приложение в новой вкладке",
           variant: "destructive",
         });
-        setScannerStatus("error");
         return;
       }
-
-      setScannerStatus("requesting");
+    } catch {
+      setIsInIframe(true);
       toast({
-        title: "Запрос доступа к камере...",
-        description: "Разрешите доступ в диалоге браузера",
-      });
-
-      // Запрашиваем разрешение на камеру
-      try {
-        await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            facingMode: "environment",
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
-          } 
-        });
-      } catch (permError: any) {
-        let errorMessage = "Не удалось получить доступ к камере";
-        
-        if (permError.name === "NotAllowedError" || permError.name === "PermissionDeniedError") {
-          errorMessage = "Доступ к камере запрещен. Разрешите доступ в настройках браузера.";
-        } else if (permError.name === "NotFoundError") {
-          errorMessage = "Камера не найдена на устройстве";
-        } else if (permError.name === "NotReadableError") {
-          errorMessage = "Камера занята другим приложением";
-        }
-        
-        toast({
-          title: "Ошибка доступа к камере",
-          description: errorMessage,
-          variant: "destructive",
-        });
-        setScannerStatus("error");
-        return;
-      }
-
-      // Инициализируем сканер с поддержкой нужных форматов
-      const scanner = new Html5Qrcode(readerId, {
-        verbose: false,
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.QR_CODE,
-        ]
-      });
-      scannerRef.current = scanner;
-
-      await scanner.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: { width: 300, height: 150 },
-        },
-        (decodedText) => {
-          const now = Date.now();
-
-          if (decodedText !== lastScannedCode || now - lastScanTime > 2300) {
-            if (!codes.includes(decodedText)) {
-              setCodes((prev) => [...prev, decodedText]);
-              setLastScannedCode(decodedText);
-              setLastScanTime(now);
-
-              // Вибрация при успехе (если поддерживается)
-              if (navigator.vibrate) {
-                navigator.vibrate(200);
-              }
-
-              toast({
-                title: "✓ Трек-код добавлен",
-                description: decodedText,
-              });
-            }
-          }
-        },
-        (errorMessage) => {
-          // Игнорируем ошибки сканирования (они происходят постоянно пока нет кода в кадре)
-        }
-      );
-
-      setIsScanning(true);
-      setScannerStatus("active");
-      toast({
-        title: "Сканирование активно",
-        description: "Наведите камеру на штрих-код",
-      });
-    } catch (error: any) {
-      console.error("Scanner error:", error);
-      toast({
-        title: "Ошибка запуска сканера",
-        description: error?.message || "Не удалось запустить сканер",
+        title: "Камера недоступна",
+        description: "Откройте приложение в новой вкладке",
         variant: "destructive",
       });
-      setScannerStatus("error");
+      return;
     }
-  };
+
+    toast({
+      title: "Запрос доступа к камере...",
+      description: "Разрешите доступ в диалоге браузера",
+    });
+
+    await start();
+
+    toast({
+      title: "Сканирование активно",
+      description: "Наведите камеру на штрих-код",
+    });
+  } catch (err: any) {
+    console.error("Scanner start error:", err);
+    toast({
+      title: "Ошибка запуска сканера",
+      description: errorMessage || err?.message || "Не удалось запустить камеру",
+      variant: "destructive",
+    });
+  }
+};
 
   // -------------------- CAMERA STOP --------------------
-  const stopScanning = async () => {
-    try {
-      if (scannerRef.current) {
-        await scannerRef.current.stop();
-        scannerRef.current.clear();
-      }
-    } catch (e) {
-      console.error("Stop error:", e);
-    }
-    setIsScanning(false);
-    setScannerStatus("idle");
-  };
+const stopScanning = async () => {
+  try {
+    await stop();
+  } catch (e) {
+    console.error("Stop error:", e);
+  }
+};
 
-  useEffect(() => {
-    return () => {
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => {});
-      }
-    };
-  }, []);
+useEffect(() => {
+  try {
+    setIsInIframe(window.self !== window.top);
+  } catch {
+    setIsInIframe(true);
+  }
+  return () => {
+    stop().catch(() => {});
+  };
+}, [stop]);
 
   // -------------------- MANUAL CODE --------------------
   const addManualCode = () => {
@@ -285,7 +230,7 @@ ${codes.map((c, i) => `${i + 1}. ${c}`).join("\n")}
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            {!isScanning ? (
+{!isActive ? (
               <Button onClick={startScanning} disabled={scannerStatus === "requesting"} className="w-full">
                 <Camera className="h-4 w-4 mr-2" /> 
                 {scannerStatus === "requesting" ? "Разрешите доступ к камере..." : "Открыть камеру"}
@@ -296,15 +241,15 @@ ${codes.map((c, i) => `${i + 1}. ${c}`).join("\n")}
               </Button>
             )}
             
-            {scannerStatus === "error" && (
+{(scannerStatus === "error" || isInIframe) && (
               <div className="text-sm text-destructive p-3 bg-destructive/10 rounded-md">
                 <p className="font-semibold">Не удалось запустить камеру</p>
-                <p className="mt-1">Проверьте разрешения камеры в настройках браузера</p>
+                <p className="mt-1">{errorMessage || (isInIframe ? "Режим предпросмотра блокирует камеру. Откройте приложение в новой вкладке." : "Проверьте разрешения камеры в настройках браузера")}</p>
               </div>
             )}
           </div>
 
-          {isScanning && (
+          {(scannerStatus === "requesting" || isActive) && (
             <div className="border-2 border-primary rounded-lg overflow-hidden bg-black">
               <div id={readerId} className="w-full" />
               <div className="p-3 bg-primary/10 text-center text-sm">
