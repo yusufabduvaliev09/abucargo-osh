@@ -341,7 +341,7 @@ const AdminUsers = () => {
           <CardTitle>Пользователи</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-2 mb-4">
+          <div className="flex gap-2 mb-4 flex-wrap">
             <Button onClick={() => setShowAddDialog(true)}>
               <UserPlus className="h-4 w-4 mr-2" />
               Добавить вручную
@@ -357,6 +357,14 @@ const AdminUsers = () => {
                   onChange={handleFileUpload}
                 />
               </label>
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={() => setShowDeleteAllDialog(true)}
+              disabled={isDeleting || users.length === 0}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Удалить всех пользователей
             </Button>
           </div>
 
