@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Camera, Plus, Copy, MessageCircle, Trash2, CameraOff, Loader2 } from "lucide-react";
+import { Camera, Plus, Copy, MessageCircle, Trash2 } from "lucide-react";
 import { Html5Qrcode } from "html5-qrcode";
 
 type PvzLocation = "nariman" | "zhiydalik" | "dostuk";
@@ -32,14 +32,15 @@ export default function Scanner() {
   const [weight, setWeight] = useState("");
   const [pricePerKg, setPricePerKg] = useState("250");
   const [isScanning, setIsScanning] = useState(false);
-  const [isCameraLoading, setIsCameraLoading] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  
-  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
-  const scannerDivId = "reader";
-  const lastScannedRef = useRef<string>("");
-  const lastScanTimeRef = useRef<number>(0);
+  const [qrScanner, setQrScanner] = useState<Html5Qrcode | null>(null);
   const { toast } = useToast();
+
+  // Очистка прошлых сессий камеры (ОЧЕНЬ ВАЖНО!)
+  const cleanupScanner = async () => {
+    try {
+      await Html5Qrcode.cleanup();
+    } catch {}
+  };
 
   const getClientCode = (id: string, pvzLocation: PvzLocation): string => {
     const prefix = pvzLocation === "nariman" ? "YQ" : pvzLocation === "zhiydalik" ? "YX" : "JL";
@@ -74,184 +75,113 @@ export default function Scanner() {
   };
 
   useEffect(() => {
-    if (clientId) {
-      fetchClientData(clientId);
-    }
+    if (clientId) fetchClientData(clientId);
   }, [clientId, pvz]);
 
+  // ЗАПУСК КАМЕРЫ
   const startScanning = async () => {
-  try {
-    setIsScanning(true);
+    try {
+      await cleanupScanner();
 
-    const el = document.getElementById("reader");
-    if (!el) {
-      toast({
-        title: "Ошибка",
-        description: "Элемент камеры не найден",
-        variant: "destructive",
-      });
-      setIsScanning(false);
-      return;
-    }
+      const elementId = "reader";
 
-    el.innerHTML = "";
+      const html5Qr = new Html5Qrcode(elementId);
+      setQrScanner(html5Qr);
 
-    const cameras = await Html5Qrcode.getCameras();
-    if (!cameras || cameras.length === 0) {
-      toast({
-        title: "Ошибка",
-        description: "Камера не найдена. Разрешите доступ.",
-        variant: "destructive",
-      });
-      setIsScanning(false);
-      return;
-    }
+      await html5Qr.start(
+        { facingMode: "environment" }, // всегда задняя камера
+        { fps: 10, qrbox: { width: 250, height: 250 } },
 
-    const cameraId =
-      cameras.find((c) => /back|rear|environment/i.test(c.label))?.id ||
-      cameras[0].id;
+        (decoded) => {
+          if (!codes.includes(decoded)) {
+            setCodes((prev) => [...prev, decoded]);
+            toast({
+              title: "Трек-код добавлен",
+              description: decoded,
+            });
+          }
+        },
 
-    const qr = new Html5Qrcode("reader");
-    setHtml5QrCode(qr);
-
-    await qr.start(
-      { deviceId: { exact: cameraId } },
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      (decodedText) => {
-        const now = Date.now();
-
-        if (
-          (!codes.includes(decodedText)) &&
-          (decodedText !== lastScannedCode || now - lastScanTime > 2500)
-        ) {
-          setCodes((prev) => [...prev, decodedText]);
-          setLastScannedCode(decodedText);
-          setLastScanTime(now);
-          toast({ title: "Трек-код добавлен", description: decodedText });
+        (err) => {
+          console.warn("Ошибка QR:", err);
         }
-      }
-    );
+      );
 
-  } catch (err: any) {
-    console.error("Ошибка камеры:", err);
+      setIsScanning(true);
 
-    let msg = "Не удалось открыть камеру.";
-
-    if (err?.message?.includes("NotAllowedError"))
-      msg = "Разрешите доступ к камере.";
-    if (err?.message?.includes("NotFoundError"))
-      msg = "Камера не найдена.";
-
-    toast({
-      title: "Ошибка камеры",
-      description: msg,
-      variant: "destructive",
-    });
-
-    setIsScanning(false);
-  }
-};
-
-  const stopScanning = async () => {
-  try {
-    if (html5QrCode) {
-      await html5QrCode.stop();
-      await html5QrCode.clear();
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Ошибка камеры",
+        description: "Не удалось открыть камеру",
+        variant: "destructive",
+      });
     }
-  } catch (e) {
-    console.log(e);
-  }
+  };
 
-  setIsScanning(false);
-  setHtml5QrCode(null);
-};
+  // ОСТАНОВКА КАМЕРЫ
+  const stopScanning = async () => {
+    try {
+      if (qrScanner) {
+        await qrScanner.stop();
+        await cleanupScanner();
+        setQrScanner(null);
+      }
+      setIsScanning(false);
+    } catch (err) {
+      console.error("Ошибка остановки камеры:", err);
+    }
+  };
 
   const addManualCode = () => {
-    if (manualCode.trim() && !codes.includes(manualCode.trim())) {
-      setCodes((prev) => [...prev, manualCode.trim()]);
-      setManualCode("");
+    const code = manualCode.trim();
+    if (code && !codes.includes(code)) {
+      setCodes((prev) => [...prev, code]);
       toast({
         title: "Трек-код добавлен",
-        description: manualCode.trim(),
+        description: code,
       });
     }
+    setManualCode("");
   };
 
-  const removeCode = (codeToRemove: string) => {
-    setCodes((prev) => prev.filter((code) => code !== codeToRemove));
+  const removeCode = (code: string) => {
+    setCodes((prev) => prev.filter((c) => c !== code));
   };
 
-  const clearAllCodes = () => {
-    setCodes([]);
-    toast({
-      title: "Список очищен",
-    });
-  };
-
-  const totalPrice = weight && pricePerKg ? parseFloat(weight) * parseFloat(pricePerKg) : 0;
+  const totalPrice = weight && pricePerKg ? Number(weight) * Number(pricePerKg) : 0;
 
   const whatsappMessage = clientData
     ? `Здравствуйте, уважаемый(ая) ${clientData.client_code} 📦
-Ваши посылки прибыли с трек-кодами:
-${codes.map((code, i) => `${i + 1}. ${code}`).join("\n")}
+Ваши посылки прибыли:
+${codes.map((c, i) => `${i + 1}. ${c}`).join("\n")}
 (${codes.length} шт)
-⚖️ Вес посылок: ${weight} кг
-💰 Стоимость: ${totalPrice.toFixed(2)} сом
-📍 Адрес самовывоза: ${PVZ_ADDRESSES[pvz]}
-⏰ График работы: 9:00 до 21:00
-💳 Реквизиты для оплаты: Мбанк ДИЛНОЗА А: 552820112
-После оплаты обязательно отправьте чек. 🧾
-Важно❗ Забрать нужно в течение 5 дней, иначе хранение 20 сом/день.
-С уважением, команда ABU Cargo ❤️`
+Вес: ${weight} кг
+Сумма: ${totalPrice} сом
+Адрес: ${PVZ_ADDRESSES[pvz]}
+График: 9:00–21:00
+Оплата: Мбанк 552820112 (ДИЛНОЗА)
+Забрать в течение 5 дней.`
     : "";
 
   const copyMessage = () => {
-    if (!whatsappMessage) {
-      toast({
-        title: "Ошибка",
-        description: "Заполните все данные для сообщения",
-        variant: "destructive",
-      });
-      return;
-    }
-    
     navigator.clipboard.writeText(whatsappMessage);
     toast({
       title: "Скопировано",
-      description: "Сообщение скопировано в буфер обмена",
+      description: "Сообщение скопировано",
     });
   };
 
   const openWhatsApp = () => {
-    if (!clientData) {
-      toast({
-        title: "Ошибка",
-        description: "Клиент не найден",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!whatsappMessage) {
-      toast({
-        title: "Ошибка",
-        description: "Заполните все данные для сообщения",
-        variant: "destructive",
-      });
-      return;
-    }
-
+    if (!clientData) return;
     const phone = clientData.phone.replace(/\D/g, "");
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(whatsappMessage)}`;
     window.open(url, "_blank");
   };
 
-  // Очистка при размонтировании компонента
   useEffect(() => {
     return () => {
-      if (html5QrCodeRef.current) {
-        html5QrCodeRef.current.stop().catch(console.error);
-      }
+      stopScanning();
     };
   }, []);
 
@@ -259,15 +189,12 @@ ${codes.map((code, i) => `${i + 1}. ${code}`).join("\n")}
     <div className="container mx-auto p-6 space-y-6">
       <h1 className="text-3xl font-bold">Сканер посылок</h1>
 
+      {/* ПВЗ */}
       <Card>
-        <CardHeader>
-          <CardTitle>Выбор ПВЗ</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Выбор ПВЗ</CardTitle></CardHeader>
         <CardContent>
-          <Select value={pvz} onValueChange={(value) => setPvz(value as PvzLocation)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
+          <Select value={pvz} onValueChange={(v) => setPvz(v as PvzLocation)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="nariman">Нариман</SelectItem>
               <SelectItem value="zhiydalik">Жыйдалик УПТК</SelectItem>
@@ -277,177 +204,111 @@ ${codes.map((code, i) => `${i + 1}. ${code}`).join("\n")}
         </CardContent>
       </Card>
 
+      {/* СКАНЕР */}
       <Card>
-        <CardHeader>
-          <CardTitle>Сканирование трек-кодов</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Сканирование</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="border-2 border-primary rounded-lg p-4 bg-muted/50">
-  <div id="reader" className={`${isScanning ? "block" : "hidden"} w-full`} />
-</div>
-          
-          {cameraError && (
-            <div className="p-3 bg-destructive/10 border border-destructive rounded text-destructive text-sm">
-              {cameraError}
+
+          {isScanning && (
+            <div className="border p-2 bg-muted rounded">
+              <div id="reader" className="w-full"></div>
             </div>
           )}
 
-          <div className="flex gap-2">
-            {!isScanning ? (
-              <Button 
-                onClick={startScanning} 
-                disabled={isCameraLoading}
-              >
-                {isCameraLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Загрузка...
-                  </>
-                ) : (
-                  <>
-                    <Camera className="h-4 w-4 mr-2" />
-                    Открыть камеру
-                  </>
-                )}
-              </Button>
-            ) : (
-              <Button variant="destructive" onClick={stopScanning} disabled={isCameraLoading}>
-                <CameraOff className="h-4 w-4 mr-2" />
-                Остановить камеру
-              </Button>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Input
-              placeholder="Введите трек-код вручную"
-              value={manualCode}
-              onChange={(e) => setManualCode(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && addManualCode()}
-            />
-            <Button onClick={addManualCode} className="w-full">
-              <Plus className="h-4 w-4 mr-2" />
-              Добавить
+          {!isScanning ? (
+            <Button onClick={startScanning}>
+              <Camera className="h-4 w-4 mr-2" />
+              Включить камеру
             </Button>
-          </div>
-
-          {codes.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <h3 className="font-semibold">Добавленные трек-коды ({codes.length}):</h3>
-                <Button variant="outline" size="sm" onClick={clearAllCodes}>
-                  Очистить все
-                </Button>
-              </div>
-              {codes.map((code) => (
-                <div key={code} className="flex items-center justify-between p-2 bg-muted rounded">
-                  <span className="font-mono text-sm">{code}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeCode(code)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+          ) : (
+            <Button variant="destructive" onClick={stopScanning}>
+              Остановить камеру
+            </Button>
           )}
+
+          <Input
+            placeholder="Введите трек-код вручную"
+            value={manualCode}
+            onChange={(e) => setManualCode(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addManualCode()}
+          />
+          <Button onClick={addManualCode}>Добавить</Button>
+
+          {codes.map((code) => (
+            <div key={code} className="flex justify-between bg-muted p-2 rounded">
+              {code}
+              <Button variant="ghost" size="icon" onClick={() => removeCode(code)}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
         </CardContent>
       </Card>
 
+      {/* Клиент */}
       <Card>
-        <CardHeader>
-          <CardTitle>Данные клиента</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">ID клиента (например: 11)</label>
-            <Input
-              placeholder="11"
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-            />
-            {clientId && (
-              <p className="text-sm text-muted-foreground">
-                Полный код: {getClientCode(clientId, pvz)}
-              </p>
-            )}
-          </div>
+        <CardHeader><CardTitle>Клиент</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <Input
+            placeholder="ID клиента"
+            type="number"
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value)}
+          />
 
           {clientData && (
-            <div className="p-4 bg-muted rounded space-y-2">
-              <p><strong>Имя:</strong> {clientData.full_name}</p>
-              <p><strong>Телефон:</strong> {clientData.phone}</p>
-              <p><strong>Код клиента:</strong> {clientData.client_code}</p>
-              <p><strong>ПВЗ:</strong> {PVZ_ADDRESSES[clientData.pvz_location as PvzLocation]}</p>
+            <div className="bg-muted p-3 rounded">
+              <p><b>Имя:</b> {clientData.full_name}</p>
+              <p><b>Телефон:</b> {clientData.phone}</p>
+              <p><b>Код:</b> {clientData.client_code}</p>
             </div>
           )}
         </CardContent>
       </Card>
 
+      {/* Цена */}
       <Card>
-        <CardHeader>
-          <CardTitle>Вес и расчёт стоимости</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Вес (кг)</label>
-            <Input
-              type="number"
-              step="0.01"
-              placeholder="0.00"
-              value={weight}
-              onChange={(e) => setWeight(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Цена за кг</label>
-            <Select value={pricePerKg} onValueChange={setPricePerKg}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="250">250 сом/кг</SelectItem>
-                <SelectItem value="240">240 сом/кг</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <CardHeader><CardTitle>Вес и цена</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <Input
+            type="number"
+            placeholder="Вес"
+            value={weight}
+            onChange={(e) => setWeight(e.target.value)}
+          />
+          <Select value={pricePerKg} onValueChange={setPricePerKg}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="250">250 сом</SelectItem>
+              <SelectItem value="240">240 сом</SelectItem>
+            </SelectContent>
+          </Select>
 
           {weight && (
-            <div className="p-4 bg-primary/10 rounded">
-              <p className="text-2xl font-bold">
-                Итого: {totalPrice.toFixed(2)} сом
-              </p>
-            </div>
+            <p className="font-bold text-xl">Итого: {totalPrice} сом</p>
           )}
         </CardContent>
       </Card>
 
-      {clientData && codes.length > 0 && weight && (
+      {/* УВЕДОМЛЕНИЕ */}
+      {clientData && codes.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle>Отправка уведомления</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="p-4 bg-muted rounded whitespace-pre-wrap text-sm max-h-60 overflow-y-auto">
+          <CardHeader><CardTitle>Отправка</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <pre className="bg-muted p-3 rounded whitespace-pre-wrap">
               {whatsappMessage}
-            </div>
+            </pre>
 
-            <div className="flex gap-2">
-              <Button onClick={copyMessage} variant="outline" className="flex-1">
-                <Copy className="h-4 w-4 mr-2" />
-                Скопировать сообщение
-              </Button>
-              <Button onClick={openWhatsApp} className="flex-1">
-                <MessageCircle className="h-4 w-4 mr-2" />
-                Отправить в WhatsApp
-              </Button>
-            </div>
+            <Button onClick={copyMessage} variant="outline">
+              <Copy className="h-4 w-4 mr-2" /> Скопировать
+            </Button>
+
+            <Button onClick={openWhatsApp}>
+              <MessageCircle className="h-4 w-4 mr-2" /> WhatsApp
+            </Button>
           </CardContent>
         </Card>
       )}
     </div>
   );
-    }
+        }
