@@ -36,7 +36,7 @@ const readerId = "qr-reader";
 const [isInIframe, setIsInIframe] = useState(false);
 const { status: scannerStatus, errorMessage, start, stop } = useBarcodeScanner({
   readerId,
-  scanDelayMs: 2000,
+  scanDelayMs: 300,
   blockInIframe: true,
   onScan: (decodedText: string) => {
     setCodes((prev) => (prev.includes(decodedText) ? prev : [...prev, decodedText]));
