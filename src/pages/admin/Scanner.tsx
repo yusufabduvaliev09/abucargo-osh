@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Camera, Plus, Copy, MessageCircle, Trash2, CameraOff } from "lucide-react";
-import { Html5Qrcode } from "html5-qrcode";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 
 type PvzLocation = "nariman" | "zhiydalik" | "dostuk";
 
@@ -140,7 +140,8 @@ export default function Scanner() {
       await cleanupScanner();
 
       const html5Qr = new Html5Qrcode(scannerDivId, {
-        formatsToSupport: BARCODE_FORMATS // Только штрих-коды
+        verbose: false,
+        formatsToSupport: BARCODE_FORMATS
       });
       qrScannerRef.current = html5Qr;
 
