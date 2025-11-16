@@ -80,96 +80,91 @@ export default function Scanner() {
   }, [clientId, pvz]);
 
   const startScanning = async () => {
-    setIsCameraLoading(true);
-    setCameraError(null);
-    
-    try {
-      // Очищаем предыдущий сканер
-      if (html5QrCodeRef.current) {
-        try {
-          await html5QrCodeRef.current.stop();
-        } catch (e) {
-          console.log("Cleanup error:", e);
-        }
-        html5QrCodeRef.current = null;
-      }
+  try {
+    setIsScanning(true);
 
-      const qrCode = new Html5Qrcode(scannerDivId);
-      html5QrCodeRef.current = qrCode;
-
-      // Получаем список камер и выбираем заднюю камеру
-      const devices = await Html5Qrcode.getCameras().catch(() => [] as any[]);
-      let cameraId: string | undefined =
-        devices.find((d: any) => /back|rear|environment/i.test(d?.label || ""))?.id ||
-        devices[0]?.id;
-
-      const constraints: any = cameraId
-        ? { deviceId: { exact: cameraId } }
-        : { facingMode: "environment" };
-
-      await qrCode.start(
-        constraints,
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-        },
-        (decodedText) => {
-          const now = Date.now();
-          const timeSinceLastScan = now - lastScanTimeRef.current;
-          
-          // Проверка задержки 2 секунды между сканированиями
-          if ((decodedText !== lastScannedRef.current || timeSinceLastScan > 2000) && 
-              !codes.includes(decodedText)) {
-            setCodes((prev) => [...prev, decodedText]);
-            lastScannedRef.current = decodedText;
-            lastScanTimeRef.current = now;
-            toast({
-              title: "Трек-код добавлен",
-              description: decodedText,
-            });
-          }
-        },
-        () => {}
-      );
-      
-      setIsScanning(true);
-      setIsCameraLoading(false);
-    } catch (error: any) {
-      console.error("Camera error:", error);
-      setIsCameraLoading(false);
-      setIsScanning(false);
-      
-      let errorMsg = "Не удалось запустить камеру";
-      if (error?.message?.includes("NotAllowedError")) {
-        errorMsg = "Доступ к камере запрещен. Разрешите доступ в настройках браузера.";
-      } else if (error?.message?.includes("NotFoundError")) {
-        errorMsg = "Камера не найдена. Убедитесь, что камера подключена и доступна.";
-      }
-      
-      setCameraError(errorMsg);
+    const el = document.getElementById("reader");
+    if (!el) {
       toast({
-        title: "Ошибка камеры",
-        description: errorMsg,
+        title: "Ошибка",
+        description: "Элемент камеры не найден",
         variant: "destructive",
       });
+      setIsScanning(false);
+      return;
     }
-  };
+
+    el.innerHTML = "";
+
+    const cameras = await Html5Qrcode.getCameras();
+    if (!cameras || cameras.length === 0) {
+      toast({
+        title: "Ошибка",
+        description: "Камера не найдена. Разрешите доступ.",
+        variant: "destructive",
+      });
+      setIsScanning(false);
+      return;
+    }
+
+    const cameraId =
+      cameras.find((c) => /back|rear|environment/i.test(c.label))?.id ||
+      cameras[0].id;
+
+    const qr = new Html5Qrcode("reader");
+    setHtml5QrCode(qr);
+
+    await qr.start(
+      { deviceId: { exact: cameraId } },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      (decodedText) => {
+        const now = Date.now();
+
+        if (
+          (!codes.includes(decodedText)) &&
+          (decodedText !== lastScannedCode || now - lastScanTime > 2500)
+        ) {
+          setCodes((prev) => [...prev, decodedText]);
+          setLastScannedCode(decodedText);
+          setLastScanTime(now);
+          toast({ title: "Трек-код добавлен", description: decodedText });
+        }
+      }
+    );
+
+  } catch (err: any) {
+    console.error("Ошибка камеры:", err);
+
+    let msg = "Не удалось открыть камеру.";
+
+    if (err?.message?.includes("NotAllowedError"))
+      msg = "Разрешите доступ к камере.";
+    if (err?.message?.includes("NotFoundError"))
+      msg = "Камера не найдена.";
+
+    toast({
+      title: "Ошибка камеры",
+      description: msg,
+      variant: "destructive",
+    });
+
+    setIsScanning(false);
+  }
+};
 
   const stopScanning = async () => {
-    if (html5QrCodeRef.current) {
-      try {
-        setIsCameraLoading(true);
-        await html5QrCodeRef.current.stop();
-        html5QrCodeRef.current.clear();
-        html5QrCodeRef.current = null;
-        setIsScanning(false);
-      } catch (error) {
-        console.error("Error stopping camera:", error);
-      } finally {
-        setIsCameraLoading(false);
-      }
+  try {
+    if (html5QrCode) {
+      await html5QrCode.stop();
+      await html5QrCode.clear();
     }
-  };
+  } catch (e) {
+    console.log(e);
+  }
+
+  setIsScanning(false);
+  setHtml5QrCode(null);
+};
 
   const addManualCode = () => {
     if (manualCode.trim() && !codes.includes(manualCode.trim())) {
@@ -287,11 +282,9 @@ ${codes.map((code, i) => `${i + 1}. ${code}`).join("\n")}
           <CardTitle>Сканирование трек-кодов</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {isScanning && (
-            <div className="border-2 border-primary rounded-lg p-4 bg-muted/50">
-              <div id={scannerDivId} className="w-full min-h-[300px]" />
-            </div>
-          )}
+          <div className="border-2 border-primary rounded-lg p-4 bg-muted/50">
+  <div id="reader" className={`${isScanning ? "block" : "hidden"} w-full`} />
+</div>
           
           {cameraError && (
             <div className="p-3 bg-destructive/10 border border-destructive rounded text-destructive text-sm">
