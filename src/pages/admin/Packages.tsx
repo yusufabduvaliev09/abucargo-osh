@@ -8,8 +8,9 @@ import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileSpreadsheet, CalendarIcon } from "lucide-react";
+import { Upload, FileSpreadsheet, CalendarIcon, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import * as XLSX from 'xlsx';
 
 const AdminPackages = () => {
@@ -23,6 +24,9 @@ const AdminPackages = () => {
   const [dateColumn, setDateColumn] = useState("");
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [showColumnSelector, setShowColumnSelector] = useState(false);
+  const [deleteDate, setDeleteDate] = useState<Date>();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -323,6 +327,112 @@ const AdminPackages = () => {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Trash2 className="h-5 w-5 text-destructive" />
+            Удаление отправлений
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Выберите дату для удаления отправлений</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start text-left font-normal"
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {deleteDate ? format(deleteDate, "PPP") : <span>Выберите дату</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  selected={deleteDate}
+                  onSelect={setDeleteDate}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          <Button
+            variant="destructive"
+            onClick={() => setShowDeleteDialog(true)}
+            disabled={!deleteDate || isDeleting}
+            className="w-full"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Удалить отправления
+          </Button>
+
+          <div className="bg-destructive/10 p-4 rounded-lg">
+            <p className="text-sm text-destructive font-semibold">⚠️ Внимание!</p>
+            <p className="text-sm mt-2">
+              Будут удалены ВСЕ отправления, созданные в выбранную дату. Это действие необратимо!
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Подтвердите удаление</AlertDialogTitle>
+            <AlertDialogDescription>
+              Вы уверены, что хотите удалить ВСЕ отправления, созданные {deleteDate ? format(deleteDate, "PPP") : ""}?
+              Это действие необратимо и удалит все трек-коды из базы данных.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!deleteDate) return;
+                
+                setIsDeleting(true);
+                try {
+                  const startOfDay = new Date(deleteDate);
+                  startOfDay.setHours(0, 0, 0, 0);
+                  
+                  const endOfDay = new Date(deleteDate);
+                  endOfDay.setHours(23, 59, 59, 999);
+
+                  const { error } = await supabase
+                    .from("packages")
+                    .delete()
+                    .gte("created_at", startOfDay.toISOString())
+                    .lte("created_at", endOfDay.toISOString());
+
+                  if (error) throw error;
+
+                  toast({
+                    title: "Успешно",
+                    description: "Отправления удалены",
+                  });
+                  
+                  setDeleteDate(undefined);
+                } catch (error) {
+                  toast({
+                    title: "Ошибка",
+                    description: "Не удалось удалить отправления",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setIsDeleting(false);
+                  setShowDeleteDialog(false);
+                }
+              }}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

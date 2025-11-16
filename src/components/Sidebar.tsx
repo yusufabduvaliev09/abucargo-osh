@@ -1,4 +1,4 @@
-import { Home, Package, Truck, LogOut, Users, PackagePlus, Shield, Settings, Scan } from "lucide-react";
+import { Home, Package, Truck, LogOut, Users, PackagePlus, Shield, Settings, MessageCircle, QrCode } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   Sidebar,
@@ -37,14 +37,15 @@ export function AppSidebar({ userRole }: AppSidebarProps) {
     { title: "Главное", url: "/dashboard", icon: Home },
     { title: "В дороге", url: "/in-transit", icon: Truck },
     { title: "Мои посылки", url: "/my-packages", icon: Package },
+    { title: "Контакты", url: "/contacts", icon: MessageCircle },
   ];
 
   const adminItems = [
     { title: "Пользователи", url: "/admin/users", icon: Users },
     { title: "Приём посылок", url: "/admin/packages", icon: PackagePlus },
+    { title: "Сканер", url: "/admin/scanner", icon: QrCode },
     { title: "Роли", url: "/admin/roles", icon: Shield },
     { title: "Настройки", url: "/admin/settings", icon: Settings },
-    { title: "Сканер", url: "https://abucargoscanner.lovable.app", icon: Scan, external: true },
     { title: "Контакты", url: "/admin/contacts", icon: Users },
   ];
 
@@ -83,28 +84,16 @@ export function AppSidebar({ userRole }: AppSidebarProps) {
               <SidebarMenu>
                 {adminItems.map((item) => (
                   <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild={!item.external}>
-                      {item.external ? (
-                        <a
-                          href={item.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2"
-                        >
-                          <item.icon className="h-4 w-4" />
-                          {!collapsed && <span>{item.title}</span>}
-                        </a>
-                      ) : (
-                        <NavLink
-                          to={item.url}
-                          className={({ isActive }) =>
-                            isActive ? "bg-accent text-accent-foreground" : ""
-                          }
-                        >
-                          <item.icon className="h-4 w-4" />
-                          {!collapsed && <span>{item.title}</span>}
-                        </NavLink>
-                      )}
+                    <SidebarMenuButton asChild>
+                      <NavLink
+                        to={item.url}
+                        className={({ isActive }) =>
+                          isActive ? "bg-accent text-accent-foreground" : ""
+                        }
+                      >
+                        <item.icon className="h-4 w-4" />
+                        {!collapsed && <span>{item.title}</span>}
+                      </NavLink>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
