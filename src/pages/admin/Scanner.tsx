@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Camera, Plus, Copy, MessageCircle, Trash2 } from "lucide-react";
+import { Camera, Plus, Copy, MessageCircle, Trash2, CameraOff, Loader2 } from "lucide-react";
 import { Html5Qrcode } from "html5-qrcode";
 
 type PvzLocation = "nariman" | "zhiydalik" | "dostuk";
@@ -32,9 +32,13 @@ export default function Scanner() {
   const [weight, setWeight] = useState("");
   const [pricePerKg, setPricePerKg] = useState("250");
   const [isScanning, setIsScanning] = useState(false);
-  const [html5QrCode, setHtml5QrCode] = useState<Html5Qrcode | null>(null);
-  const [lastScannedCode, setLastScannedCode] = useState("");
-  const [lastScanTime, setLastScanTime] = useState(0);
+  const [isCameraLoading, setIsCameraLoading] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const scannerDivId = "reader";
+  const lastScannedRef = useRef<string>("");
+  const lastScanTimeRef = useRef<number>(0);
   const { toast } = useToast();
 
   const getClientCode = (id: string, pvzLocation: PvzLocation): string => {
@@ -76,53 +80,93 @@ export default function Scanner() {
   }, [clientId, pvz]);
 
   const startScanning = async () => {
+    setIsCameraLoading(true);
+    setCameraError(null);
+    
     try {
-      const qrCode = new Html5Qrcode("reader");
-      setHtml5QrCode(qrCode);
+      // Очищаем предыдущий сканер
+      if (html5QrCodeRef.current) {
+        try {
+          await html5QrCodeRef.current.stop();
+        } catch (e) {
+          console.log("Cleanup error:", e);
+        }
+        html5QrCodeRef.current = null;
+      }
+
+      const qrCode = new Html5Qrcode(scannerDivId);
+      html5QrCodeRef.current = qrCode;
+
+      // Получаем список камер и выбираем заднюю камеру
+      const devices = await Html5Qrcode.getCameras().catch(() => [] as any[]);
+      let cameraId: string | undefined =
+        devices.find((d: any) => /back|rear|environment/i.test(d?.label || ""))?.id ||
+        devices[0]?.id;
+
+      const constraints: any = cameraId
+        ? { deviceId: { exact: cameraId } }
+        : { facingMode: "environment" };
 
       await qrCode.start(
-        { facingMode: "environment" },
+        constraints,
         {
           fps: 10,
           qrbox: { width: 250, height: 250 },
         },
         (decodedText) => {
           const now = Date.now();
-          // Проверка задержки 2.5 секунды между сканированиями
-          if (decodedText !== lastScannedCode || now - lastScanTime > 2500) {
-            if (!codes.includes(decodedText)) {
-              setCodes((prev) => [...prev, decodedText]);
-              setLastScannedCode(decodedText);
-              setLastScanTime(now);
-              toast({
-                title: "Трек-код добавлен",
-                description: decodedText,
-              });
-            }
+          const timeSinceLastScan = now - lastScanTimeRef.current;
+          
+          // Проверка задержки 2 секунды между сканированиями
+          if ((decodedText !== lastScannedRef.current || timeSinceLastScan > 2000) && 
+              !codes.includes(decodedText)) {
+            setCodes((prev) => [...prev, decodedText]);
+            lastScannedRef.current = decodedText;
+            lastScanTimeRef.current = now;
+            toast({
+              title: "Трек-код добавлен",
+              description: decodedText,
+            });
           }
         },
         () => {}
       );
-
+      
       setIsScanning(true);
-    } catch (error) {
+      setIsCameraLoading(false);
+    } catch (error: any) {
+      console.error("Camera error:", error);
+      setIsCameraLoading(false);
+      setIsScanning(false);
+      
+      let errorMsg = "Не удалось запустить камеру";
+      if (error?.message?.includes("NotAllowedError")) {
+        errorMsg = "Доступ к камере запрещен. Разрешите доступ в настройках браузера.";
+      } else if (error?.message?.includes("NotFoundError")) {
+        errorMsg = "Камера не найдена. Убедитесь, что камера подключена и доступна.";
+      }
+      
+      setCameraError(errorMsg);
       toast({
-        title: "Ошибка",
-        description: "Не удалось запустить камеру",
+        title: "Ошибка камеры",
+        description: errorMsg,
         variant: "destructive",
       });
     }
   };
 
   const stopScanning = async () => {
-    if (html5QrCode) {
+    if (html5QrCodeRef.current) {
       try {
-        await html5QrCode.stop();
-        html5QrCode.clear();
-        setHtml5QrCode(null);
+        setIsCameraLoading(true);
+        await html5QrCodeRef.current.stop();
+        html5QrCodeRef.current.clear();
+        html5QrCodeRef.current = null;
         setIsScanning(false);
       } catch (error) {
-        console.error("Error stopping scanner:", error);
+        console.error("Error stopping camera:", error);
+      } finally {
+        setIsCameraLoading(false);
       }
     }
   };
@@ -140,6 +184,13 @@ export default function Scanner() {
 
   const removeCode = (codeToRemove: string) => {
     setCodes((prev) => prev.filter((code) => code !== codeToRemove));
+  };
+
+  const clearAllCodes = () => {
+    setCodes([]);
+    toast({
+      title: "Список очищен",
+    });
   };
 
   const totalPrice = weight && pricePerKg ? parseFloat(weight) * parseFloat(pricePerKg) : 0;
@@ -160,6 +211,15 @@ ${codes.map((code, i) => `${i + 1}. ${code}`).join("\n")}
     : "";
 
   const copyMessage = () => {
+    if (!whatsappMessage) {
+      toast({
+        title: "Ошибка",
+        description: "Заполните все данные для сообщения",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     navigator.clipboard.writeText(whatsappMessage);
     toast({
       title: "Скопировано",
@@ -168,20 +228,37 @@ ${codes.map((code, i) => `${i + 1}. ${code}`).join("\n")}
   };
 
   const openWhatsApp = () => {
-    if (clientData) {
-      const phone = clientData.phone.replace(/\D/g, "");
-      const url = `https://wa.me/${phone}?text=${encodeURIComponent(whatsappMessage)}`;
-      window.open(url, "_blank");
+    if (!clientData) {
+      toast({
+        title: "Ошибка",
+        description: "Клиент не найден",
+        variant: "destructive",
+      });
+      return;
     }
+
+    if (!whatsappMessage) {
+      toast({
+        title: "Ошибка",
+        description: "Заполните все данные для сообщения",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const phone = clientData.phone.replace(/\D/g, "");
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(whatsappMessage)}`;
+    window.open(url, "_blank");
   };
 
+  // Очистка при размонтировании компонента
   useEffect(() => {
     return () => {
-      if (html5QrCode) {
-        html5QrCode.stop().catch(console.error);
+      if (html5QrCodeRef.current) {
+        html5QrCodeRef.current.stop().catch(console.error);
       }
     };
-  }, [html5QrCode]);
+  }, []);
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -212,18 +289,37 @@ ${codes.map((code, i) => `${i + 1}. ${code}`).join("\n")}
         <CardContent className="space-y-4">
           {isScanning && (
             <div className="border-2 border-primary rounded-lg p-4 bg-muted/50">
-              <div id="reader" className="w-full" />
+              <div id={scannerDivId} className="w-full min-h-[300px]" />
             </div>
           )}
           
+          {cameraError && (
+            <div className="p-3 bg-destructive/10 border border-destructive rounded text-destructive text-sm">
+              {cameraError}
+            </div>
+          )}
+
           <div className="flex gap-2">
             {!isScanning ? (
-              <Button onClick={startScanning}>
-                <Camera className="h-4 w-4 mr-2" />
-                Открыть камеру
+              <Button 
+                onClick={startScanning} 
+                disabled={isCameraLoading}
+              >
+                {isCameraLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Загрузка...
+                  </>
+                ) : (
+                  <>
+                    <Camera className="h-4 w-4 mr-2" />
+                    Открыть камеру
+                  </>
+                )}
               </Button>
             ) : (
-              <Button variant="destructive" onClick={stopScanning}>
+              <Button variant="destructive" onClick={stopScanning} disabled={isCameraLoading}>
+                <CameraOff className="h-4 w-4 mr-2" />
                 Остановить камеру
               </Button>
             )}
@@ -244,10 +340,15 @@ ${codes.map((code, i) => `${i + 1}. ${code}`).join("\n")}
 
           {codes.length > 0 && (
             <div className="space-y-2">
-              <h3 className="font-semibold">Добавленные трек-коды ({codes.length}):</h3>
+              <div className="flex justify-between items-center">
+                <h3 className="font-semibold">Добавленные трек-коды ({codes.length}):</h3>
+                <Button variant="outline" size="sm" onClick={clearAllCodes}>
+                  Очистить все
+                </Button>
+              </div>
               {codes.map((code) => (
                 <div key={code} className="flex items-center justify-between p-2 bg-muted rounded">
-                  <span className="font-mono">{code}</span>
+                  <span className="font-mono text-sm">{code}</span>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -273,7 +374,6 @@ ${codes.map((code, i) => `${i + 1}. ${code}`).join("\n")}
               placeholder="11"
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
-              type="number"
             />
             {clientId && (
               <p className="text-sm text-muted-foreground">
@@ -338,7 +438,7 @@ ${codes.map((code, i) => `${i + 1}. ${code}`).join("\n")}
             <CardTitle>Отправка уведомления</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="p-4 bg-muted rounded whitespace-pre-wrap text-sm">
+            <div className="p-4 bg-muted rounded whitespace-pre-wrap text-sm max-h-60 overflow-y-auto">
               {whatsappMessage}
             </div>
 
@@ -357,4 +457,4 @@ ${codes.map((code, i) => `${i + 1}. ${code}`).join("\n")}
       )}
     </div>
   );
-}
+    }
