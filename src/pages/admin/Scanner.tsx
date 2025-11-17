@@ -52,8 +52,12 @@ export default function Scanner() {
 
   const qrScannerRef = useRef<Html5Qrcode | null>(null);
   const scannerDivId = "qr-reader";
-  const lastScannedRef = useRef<string>("");
+  
+  // Рефы для предотвращения дублирования
+  const lastScannedCodeRef = useRef<string>("");
   const lastScanTimeRef = useRef<number>(0);
+  const scanCooldownRef = useRef<number>(800); // Задержка между сканированиями
+  const processedCodesRef = useRef<Set<string>>(new Set()); // Set для хранения уникальных кодов
 
   const { toast } = useToast();
 
@@ -68,6 +72,42 @@ export default function Scanner() {
     } catch (err) {
       console.error("Cleanup error:", err);
     }
+  };
+
+  // Функция для добавления кода с защитой от дублирования
+  const addCodeSafely = (newCode: string) => {
+    const normalizedCode = newCode.trim().toUpperCase();
+    
+    // Проверяем, не был ли код уже обработан
+    if (processedCodesRef.current.has(normalizedCode)) {
+      console.log("Код уже был отсканирован:", normalizedCode);
+      return false;
+    }
+
+    const now = Date.now();
+    const timeSinceLastScan = now - lastScanTimeRef.current;
+
+    // Проверяем временную задержку и дублирование
+    if (normalizedCode === lastScannedCodeRef.current && timeSinceLastScan < scanCooldownRef.current) {
+      console.log("Повторное сканирование слишком быстро:", normalizedCode);
+      return false;
+    }
+
+    // Добавляем код в Set обработанных кодов
+    processedCodesRef.current.add(normalizedCode);
+    lastScannedCodeRef.current = normalizedCode;
+    lastScanTimeRef.current = now;
+
+    // Обновляем состояние
+    setCodes(prev => {
+      // Дополнительная проверка на случай race condition
+      if (prev.includes(normalizedCode)) {
+        return prev;
+      }
+      return [...prev, normalizedCode];
+    });
+
+    return true;
   };
 
   // -------------------- CLIENT FETCH --------------------
@@ -175,17 +215,10 @@ export default function Scanner() {
         { facingMode: "environment" },
         config,
         (decodedText) => {
-          const now = Date.now();
-          const timeSinceLastScan = now - lastScanTimeRef.current;
+          // Используем безопасное добавление кода
+          const wasAdded = addCodeSafely(decodedText);
           
-          // Быстрое сканирование с минимальной задержкой
-          if (!codes.includes(decodedText) && 
-              (decodedText !== lastScannedRef.current || timeSinceLastScan > 500)) {
-            
-            setCodes((prev) => [...prev, decodedText]);
-            lastScannedRef.current = decodedText;
-            lastScanTimeRef.current = now;
-            
+          if (wasAdded) {
             // Короткая вибрация (если доступна)
             if (navigator.vibrate) {
               navigator.vibrate(50);
@@ -195,6 +228,9 @@ export default function Scanner() {
               title: "✓ Штрих-код добавлен",
               description: decodedText,
             });
+          } else {
+            // Тихий тост для дублирования (опционально)
+            console.log("Дубликат пропущен:", decodedText);
           }
         },
         (error) => {
@@ -274,22 +310,38 @@ export default function Scanner() {
   // -------------------- MANUAL CODE --------------------
   const addManualCode = () => {
     const code = manualCode.trim();
-    if (code && !codes.includes(code)) {
-      setCodes((prev) => [...prev, code]);
+    if (!code) return;
+
+    const wasAdded = addCodeSafely(code);
+    
+    if (wasAdded) {
       setManualCode("");
       toast({
         title: "Штрих-код добавлен",
         description: code,
       });
+    } else {
+      toast({
+        title: "Дубликат",
+        description: "Этот штрих-код уже был добавлен",
+        variant: "destructive",
+      });
     }
   };
 
   const removeCode = (codeToRemove: string) => {
-    setCodes((prev) => prev.filter((code) => code !== codeToRemove));
+    setCodes(prev => prev.filter(code => code !== codeToRemove));
+    // Также удаляем из Set обработанных кодов
+    processedCodesRef.current.delete(codeToRemove.toUpperCase());
   };
 
   const clearAllCodes = () => {
     setCodes([]);
+    // Очищаем Set обработанных кодов
+    processedCodesRef.current.clear();
+    lastScannedCodeRef.current = "";
+    lastScanTimeRef.current = 0;
+    
     toast({
       title: "Список очищен",
       description: "Все штрих-коды удалены",
@@ -448,7 +500,7 @@ export default function Scanner() {
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium">
-                  Отсканировано: {codes.length} шт
+                  Уникальных кодов: {codes.length} шт
                 </span>
                 <Button 
                   variant="outline" 
@@ -558,4 +610,4 @@ export default function Scanner() {
       )}
     </div>
   );
-                                               }
+      }
