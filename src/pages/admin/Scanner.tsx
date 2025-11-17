@@ -108,10 +108,24 @@ export default function Scanner() {
       .from("whatsapp_templates")
       .select("template")
       .eq("pvz_location", pvz)
-      .single();
+      .maybeSingle();
 
     if (data && !error) {
       setTemplate(data.template);
+    } else {
+      // Дефолтный шаблон если не найден в БД
+      setTemplate(
+        `Здравствуйте, уважаемый(ая) {clientCode} 📦
+Ваши посылки прибыли:
+{packageList}
+({packageCount} шт)
+Вес: {weight} кг
+Итого: {totalPrice} сом
+Адрес: {address}
+График: 9:00–21:00
+Оплата: {paymentInfo}
+Забрать в течение 5 дней.`
+      );
     }
   };
 
@@ -299,16 +313,37 @@ export default function Scanner() {
   // -------------------- PRICE --------------------
   const totalPrice = weight && pricePerKg ? parseFloat(weight) * parseFloat(pricePerKg) : 0;
 
-  // -------------------- WHATSAPP --------------------
-  const whatsappMessage = clientData && template
-    ? template
-        .replace("{clientCode}", clientData.client_code)
-        .replace("{packageList}", codes.map((c, i) => `${i + 1}. ${c}`).join("\n"))
-        .replace("{packageCount}", codes.length.toString())
-        .replace("{weight}", weight || "0")
-        .replace("{totalPrice}", totalPrice.toString())
-        .replace("{address}", PVZ_ADDRESSES[pvz])
-    : "";
+  // -------------------- PAYMENT INFO --------------------
+  const getPaymentInfo = (pvzLocation: PvzLocation): string => {
+    switch (pvzLocation) {
+      case "zhiydalik":
+        return "Мбанк 552820112 ДИЛНОЗА А";
+      case "nariman":
+        return "Мбанк 559705370 Мухлисахон М";
+      case "dostuk":
+        return "Мбанк 559705370 Мухлисахон М";
+      default:
+        return "Мбанк 559705370 Мухлисахон М";
+    }
+  };
+
+  // -------------------- WHATSAPP MESSAGE --------------------
+  const getWhatsappMessage = (): string => {
+    if (!clientData || !template) return "";
+
+    const paymentInfo = getPaymentInfo(pvz);
+    
+    return template
+      .replace("{clientCode}", clientData.client_code)
+      .replace("{packageList}", codes.map((c, i) => `${i + 1}. ${c}`).join("\n"))
+      .replace("{packageCount}", codes.length.toString())
+      .replace("{weight}", weight || "0")
+      .replace("{totalPrice}", totalPrice.toString())
+      .replace("{address}", PVZ_ADDRESSES[pvz])
+      .replace("{paymentInfo}", paymentInfo);
+  };
+
+  const whatsappMessage = getWhatsappMessage();
 
   const copyToClipboard = async () => {
     try {
