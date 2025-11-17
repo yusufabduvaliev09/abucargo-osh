@@ -3,36 +3,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, UserPlus, Upload, Edit, Trash2, MessageCircle, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EditUserDialog } from "@/components/EditUserDialog";
 import { AddUserDialog } from "@/components/AddUserDialog";
 import { read, utils } from 'xlsx';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 interface User {
   id: string;
@@ -47,7 +25,7 @@ interface User {
 const AdminUsers = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [pvzFilter, setPvzFilter] = useState<string>("all");
+  const [pvzFilter, setPvzFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -62,7 +40,7 @@ const AdminUsers = () => {
   const fetchUsers = async () => {
     setLoading(true);
     let query = supabase.from("profiles").select("*");
-
+    
     if (pvzFilter !== "all") {
       query = query.eq("pvz_location", pvzFilter as "nariman" | "zhiydalik" | "dostuk");
     }
@@ -89,7 +67,7 @@ const AdminUsers = () => {
 
     setLoading(true);
     let query = supabase.from("profiles").select("*");
-
+    
     if (pvzFilter !== "all") {
       query = query.eq("pvz_location", pvzFilter as "nariman" | "zhiydalik" | "dostuk");
     }
@@ -137,23 +115,19 @@ const AdminUsers = () => {
       for (const row of jsonData as any[]) {
         // Поддержка русских и английских заголовков
         const clientCode = (
-          row['ID'] || row['Код'] || row['Код_пользователя'] || 
-          row['id'] || row['Id']
+          row['ID'] || row['Код'] || row['Код_пользователя'] || row['id'] || row['Id']
         )?.toString().trim().toUpperCase();
-        
+
         const fullName = (
-          row['Имя'] || row['ФИО'] || 
-          row['Name'] || row['FullName']
+          row['Имя'] || row['ФИО'] || row['Name'] || row['FullName']
         )?.toString().trim();
-        
+
         const phone = (
-          row['Телефон'] || row['Номер'] || 
-          row['Phone'] || row['Number']
+          row['Телефон'] || row['Номер'] || row['Phone'] || row['Number']
         )?.toString().trim();
-        
+
         const password = (
-          row['Пароль'] || 
-          row['Password'] || row['Pwd']
+          row['Пароль'] || row['Password'] || row['Pwd']
         )?.toString().trim();
 
         if (!clientCode || !fullName || !phone || !password) {
@@ -162,9 +136,9 @@ const AdminUsers = () => {
           continue;
         }
 
-        const pvzLocation = clientCode.startsWith('YQ') ? 'nariman' :
-                          clientCode.startsWith('YX') ? 'zhiydalik' :
-                          clientCode.startsWith('JL') ? 'dostuk' : null;
+        const pvzLocation = clientCode.startsWith('YQ') ? 'nariman' : 
+                           clientCode.startsWith('YX') ? 'zhiydalik' : 
+                           clientCode.startsWith('JL') ? 'dostuk' : null;
 
         if (!pvzLocation) {
           errorCount++;
@@ -175,7 +149,7 @@ const AdminUsers = () => {
         try {
           // Проверяем, существует ли пользователь с таким client_code
           const existingUser = existingUsersMap.get(clientCode);
-
+          
           if (existingUser) {
             // Обновляем существующего пользователя
             const { error: updateError } = await supabase
@@ -240,33 +214,28 @@ const AdminUsers = () => {
         description,
       });
 
-      if (errors.length > 0 && errors.length <= 5) {
-        console.log('Ошибки импорта:', errors);
-        // Можно также показать ошибки пользователю, если нужно
-        // toast({
-        //   title: "Ошибки импорта",
-        //   description: errors.slice(0, 3).join(', '),
-        //   variant: "destructive",
-        // });
+      if (errors.length > 0 && errors.length < 10) {
+        setTimeout(() => {
+          alert("Ошибки импорта:\n" + errors.join('\n'));
+        }, 1000);
       }
 
       fetchUsers();
+      event.target.value = "";
     } catch (error) {
       toast({
         title: "Ошибка",
-        description: "Не удалось обработать файл",
+        description: "Не удалось прочитать файл",
         variant: "destructive",
       });
     }
-
-    event.target.value = '';
   };
 
   const handleDeleteUser = async (userId: string) => {
     if (!confirm("Вы уверены, что хотите удалить этого пользователя?")) return;
 
     const { error } = await supabase.from("profiles").delete().eq("id", userId);
-
+    
     if (error) {
       toast({
         title: "Ошибка",
@@ -285,20 +254,22 @@ const AdminUsers = () => {
   const handleWhatsAppClick = (phone: string, userName: string) => {
     // Очищаем номер телефона от всех нецифровых символов
     const cleanPhone = phone.replace(/\D/g, '');
-    
     // Формируем ссылку WhatsApp
     const whatsappUrl = `https://wa.me/${cleanPhone}`;
-    
     // Открываем WhatsApp в новом окне
     window.open(whatsappUrl, '_blank');
   };
 
   const getPvzLabel = (pvz: string) => {
     switch (pvz) {
-      case "nariman": return "Нариман, Ул. Сулайманова 32";
-      case "zhiydalik": return "Жийдалик, УПТК Наби Кожо 61Б";
-      case "dostuk": return "Достук, Ул. Хабиба Абдуллаева 78";
-      default: return pvz;
+      case "nariman":
+        return "Нариман, Ул. Сулайманова 32";
+      case "zhiydalik":
+        return "Жийдалик, УПТК Наби Кожо 61Б";
+      case "dostuk":
+        return "Достук, Ул. Хабиба Абдуллаева 78";
+      default:
+        return pvz;
     }
   };
 
@@ -335,49 +306,60 @@ const AdminUsers = () => {
   };
 
   return (
-    <div className="container mx-auto p-6">
+    <div className="container mx-auto p-6 space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Пользователи</CardTitle>
+          <CardTitle className="flex items-center justify-between">
+            <span>Пользователи</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              Количество: {users.length}
+            </span>
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="flex gap-2 mb-4 flex-wrap">
-            <Button onClick={() => setShowAddDialog(true)}>
-              <UserPlus className="h-4 w-4 mr-2" />
-              Добавить вручную
-            </Button>
-            <Button variant="outline" asChild>
-              <label className="cursor-pointer">
-                <Upload className="h-4 w-4 mr-2" />
-                Импорт из Excel
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  className="hidden"
-                  onChange={handleFileUpload}
-                />
-              </label>
-            </Button>
-            <Button 
-              variant="destructive" 
-              onClick={() => setShowDeleteAllDialog(true)}
-              disabled={isDeleting || users.length === 0}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Удалить всех пользователей
-            </Button>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex gap-2 flex-1">
+              <Button onClick={() => setShowAddDialog(true)}>
+                <UserPlus className="h-4 w-4 mr-2" />
+                Добавить вручную
+              </Button>
+              
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleFileUpload}
+                className="hidden"
+                id="file-upload"
+              />
+              <Button asChild variant="outline">
+                <label htmlFor="file-upload" className="cursor-pointer">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Импорт из Excel
+                </label>
+              </Button>
+
+              <Button 
+                variant="destructive" 
+                onClick={() => setShowDeleteAllDialog(true)}
+                disabled={isDeleting || users.length === 0}
+              >
+                <AlertTriangle className="h-4 w-4 mr-2" />
+                Удалить всех пользователей
+              </Button>
+            </div>
           </div>
 
-          <div className="flex gap-2 mb-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             <Input
-              placeholder="Поиск по ID, имени или телефону"
+              placeholder="Поиск по ID, имени или телефону..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               className="flex-1"
             />
+            
             <Select value={pvzFilter} onValueChange={setPvzFilter}>
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-full sm:w-[200px]">
                 <SelectValue placeholder="Все ПВЗ" />
               </SelectTrigger>
               <SelectContent>
@@ -387,6 +369,7 @@ const AdminUsers = () => {
                 <SelectItem value="dostuk">Достук (JL)</SelectItem>
               </SelectContent>
             </Select>
+
             <Button onClick={handleSearch}>
               <Search className="h-4 w-4 mr-2" />
               Поиск
@@ -394,7 +377,10 @@ const AdminUsers = () => {
           </div>
 
           {loading ? (
-            <div className="text-center py-8">Загрузка...</div>
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+              <p className="mt-2 text-muted-foreground">Загрузка...</p>
+            </div>
           ) : (
             <div className="border rounded-lg">
               <Table>
@@ -410,7 +396,7 @@ const AdminUsers = () => {
                 <TableBody>
                   {users.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center">
+                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                         Пользователи не найдены
                       </TableCell>
                     </TableRow>
@@ -425,23 +411,25 @@ const AdminUsers = () => {
                           <div className="flex gap-2">
                             <Button
                               variant="outline"
-                              size="sm"
+                              size="icon"
                               onClick={() => handleWhatsAppClick(user.phone, user.full_name)}
                               title="Написать в WhatsApp"
                             >
                               <MessageCircle className="h-4 w-4" />
                             </Button>
+                            
                             <Button
                               variant="outline"
-                              size="sm"
+                              size="icon"
                               onClick={() => setEditingUser(user)}
                               title="Изменить"
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
+                            
                             <Button
-                              variant="destructive"
-                              size="sm"
+                              variant="outline"
+                              size="icon"
                               onClick={() => handleDeleteUser(user.id)}
                               title="Удалить"
                             >
@@ -459,12 +447,6 @@ const AdminUsers = () => {
         </CardContent>
       </Card>
 
-      <AddUserDialog
-        open={showAddDialog}
-        onOpenChange={setShowAddDialog}
-        onSuccess={fetchUsers}
-      />
-
       {editingUser && (
         <EditUserDialog
           open={!!editingUser}
@@ -474,25 +456,27 @@ const AdminUsers = () => {
         />
       )}
 
+      {showAddDialog && (
+        <AddUserDialog
+          open={showAddDialog}
+          onOpenChange={setShowAddDialog}
+          onSuccess={fetchUsers}
+        />
+      )}
+
       <AlertDialog open={showDeleteAllDialog} onOpenChange={setShowDeleteAllDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-destructive" />
-              Удалить всех пользователей?
-            </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
-              <p className="font-semibold text-destructive">
-                Вы уверены, что хотите удалить ВСЕХ пользователей?
-              </p>
-              <p>
-                Это действие необратимо! Все пользователи (кроме вас) будут удалены из системы вместе со всеми их данными.
-              </p>
+            <AlertDialogTitle>Удалить всех пользователей?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Вы уверены, что хотите удалить ВСЕХ пользователей? 
+              <br />
+              Это действие необратимо! Все пользователи (кроме вас) будут удалены из системы вместе со всеми их данными.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Отмена</AlertDialogCancel>
-            <AlertDialogAction
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction 
               onClick={handleDeleteAllUsers}
               disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
