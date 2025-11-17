@@ -182,6 +182,33 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_templates: {
+        Row: {
+          created_at: string
+          id: string
+          pvz_location: Database["public"]["Enums"]["pvz_location"]
+          template: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          pvz_location: Database["public"]["Enums"]["pvz_location"]
+          template: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          pvz_location?: Database["public"]["Enums"]["pvz_location"]
+          template?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

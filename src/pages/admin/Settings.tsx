@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Settings as SettingsIcon, Plus, Trash2, MessageCircle, Send, Instagram } from "lucide-react";
+import { Settings as SettingsIcon, Plus, Trash2, MessageCircle, Send, Instagram, Save } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const AdminSettings = () => {
   const [logoUrl, setLogoUrl] = useState("");
@@ -15,12 +17,48 @@ const AdminSettings = () => {
   const [loading, setLoading] = useState(true);
   const [contacts, setContacts] = useState<any[]>([]);
   const [newContact, setNewContact] = useState({ name: "", type: "whatsapp", url: "" });
+  const [selectedPvz, setSelectedPvz] = useState<"nariman" | "zhiydalik" | "dostuk">("nariman");
+  const [templateText, setTemplateText] = useState("");
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [adminClientCode, setAdminClientCode] = useState("");
   const { toast } = useToast();
 
   useEffect(() => {
     fetchSettings();
     fetchContacts();
+    fetchAdminProfile();
   }, []);
+
+  useEffect(() => {
+    fetchTemplate();
+  }, [selectedPvz]);
+
+  const fetchAdminProfile = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("client_code")
+        .eq("user_id", user.id)
+        .single();
+      
+      if (profile) {
+        setAdminClientCode(profile.client_code);
+      }
+    }
+  };
+
+  const fetchTemplate = async () => {
+    const { data } = await supabase
+      .from("whatsapp_templates")
+      .select("template")
+      .eq("pvz_location", selectedPvz)
+      .single();
+
+    if (data) {
+      setTemplateText(data.template);
+    }
+  };
 
   const fetchSettings = async () => {
     const { data } = await supabase
@@ -118,6 +156,42 @@ const AdminSettings = () => {
     }
   };
 
+  const handleSaveTemplate = async () => {
+    if (!templateText.trim()) {
+      toast({
+        title: "Ошибка",
+        description: "Шаблон не может быть пустым",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setTemplateLoading(true);
+
+    const { error } = await supabase
+      .from("whatsapp_templates")
+      .update({
+        template: templateText,
+        updated_by: adminClientCode,
+      })
+      .eq("pvz_location", selectedPvz);
+
+    setTemplateLoading(false);
+
+    if (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось сохранить шаблон",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Успешно",
+        description: "Шаблон сохранён",
+      });
+    }
+  };
+
   const handleSave = async () => {
     const { data: existingSettings } = await supabase
       .from("settings")
@@ -159,14 +233,22 @@ const AdminSettings = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <SettingsIcon className="h-5 w-5" />
-            Настройки приложения
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      <Tabs defaultValue="general" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="general">Общие настройки</TabsTrigger>
+          <TabsTrigger value="contacts">Контакты</TabsTrigger>
+          <TabsTrigger value="templates">Шаблоны WhatsApp</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="general">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <SettingsIcon className="h-5 w-5" />
+                Настройки приложения
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="logoUrl">URL логотипа</Label>
             <Input
@@ -235,13 +317,15 @@ const AdminSettings = () => {
             </div>
           </div>
 
-          <Button onClick={handleSave} className="w-full" size="lg">
-            Сохранить настройки
-          </Button>
-        </CardContent>
-      </Card>
+              <Button onClick={handleSave} className="w-full" size="lg">
+                Сохранить настройки
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <Card>
+        <TabsContent value="contacts">
+          <Card>
         <CardHeader>
           <CardTitle>Управление контактами</CardTitle>
         </CardHeader>
@@ -329,8 +413,70 @@ const AdminSettings = () => {
               </div>
             ))}
           </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="templates">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageCircle className="h-5 w-5" />
+                Шаблоны сообщений WhatsApp
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="pvzSelect">Выберите ПВЗ</Label>
+                <Select value={selectedPvz} onValueChange={(value: any) => setSelectedPvz(value)}>
+                  <SelectTrigger id="pvzSelect">
+                    <SelectValue placeholder="Выберите ПВЗ" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nariman">Нариман</SelectItem>
+                    <SelectItem value="zhiydalik">Жыйдалик УПТК</SelectItem>
+                    <SelectItem value="dostuk">Достук</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="templateText">Шаблон сообщения WhatsApp</Label>
+                <Textarea
+                  id="templateText"
+                  value={templateText}
+                  onChange={(e) => setTemplateText(e.target.value)}
+                  rows={15}
+                  className="font-mono text-sm"
+                  placeholder="Введите шаблон сообщения..."
+                />
+                <p className="text-sm text-muted-foreground">
+                  Используйте переменные: {"{customerId}"}, {"{codesList}"}, {"{codesCount}"}, {"{weight}"}, {"{totalPrice}"}, {"{pvz}"}
+                </p>
+              </div>
+
+              <Button 
+                onClick={handleSaveTemplate} 
+                className="w-full" 
+                size="lg"
+                disabled={templateLoading}
+              >
+                {templateLoading ? (
+                  <>
+                    <Save className="mr-2 h-4 w-4 animate-spin" />
+                    Сохранение...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Сохранить шаблон
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
