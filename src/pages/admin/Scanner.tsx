@@ -48,6 +48,7 @@ export default function Scanner() {
   const [isCameraLoading, setIsCameraLoading] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isInIframe, setIsInIframe] = useState(false);
+  const [template, setTemplate] = useState<string>("");
 
   const qrScannerRef = useRef<Html5Qrcode | null>(null);
   const scannerDivId = "qr-reader";
@@ -100,6 +101,23 @@ export default function Scanner() {
 
     setClientData(data);
   };
+
+  // -------------------- TEMPLATE FETCH --------------------
+  const fetchTemplate = async () => {
+    const { data, error } = await supabase
+      .from("whatsapp_templates")
+      .select("template")
+      .eq("pvz_location", pvz)
+      .single();
+
+    if (data && !error) {
+      setTemplate(data.template);
+    }
+  };
+
+  useEffect(() => {
+    fetchTemplate();
+  }, [pvz]);
 
   useEffect(() => {
     if (clientId) fetchClientData(clientId);
@@ -282,17 +300,14 @@ export default function Scanner() {
   const totalPrice = weight && pricePerKg ? parseFloat(weight) * parseFloat(pricePerKg) : 0;
 
   // -------------------- WHATSAPP --------------------
-  const whatsappMessage = clientData
-    ? `Здравствуйте, уважаемый(ая) ${clientData.client_code} 📦
-Ваши посылки прибыли:
-${codes.map((c, i) => `${i + 1}. ${c}`).join("\n")}
-(${codes.length} шт)
-Вес: ${weight} кг
-Итого: ${totalPrice} сом
-Адрес: ${PVZ_ADDRESSES[pvz]}
-График: 9:00–21:00
-Оплата: Мбанк 552820112 (ДИЛНОЗА)
-Забрать в течение 5 дней.`
+  const whatsappMessage = clientData && template
+    ? template
+        .replace("{clientCode}", clientData.client_code)
+        .replace("{packageList}", codes.map((c, i) => `${i + 1}. ${c}`).join("\n"))
+        .replace("{packageCount}", codes.length.toString())
+        .replace("{weight}", weight || "0")
+        .replace("{totalPrice}", totalPrice.toString())
+        .replace("{address}", PVZ_ADDRESSES[pvz])
     : "";
 
   const copyToClipboard = async () => {
