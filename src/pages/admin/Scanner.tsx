@@ -300,15 +300,31 @@ export default function Scanner() {
   const totalPrice = weight && pricePerKg ? parseFloat(weight) * parseFloat(pricePerKg) : 0;
 
   // -------------------- WHATSAPP --------------------
+  // -------------------- WHATSAPP --------------------
   const whatsappMessage = clientData && template
-    ? template
-        .replace("{clientCode}", clientData.client_code)
-        .replace("{packageList}", codes.map((c, i) => `${i + 1}. ${c}`).join("\n"))
-        .replace("{packageCount}", codes.length.toString())
-        .replace("{weight}", weight || "0")
-        .replace("{totalPrice}", totalPrice.toString())
-        .replace("{address}", PVZ_ADDRESSES[pvz])
-    : "";
+  ? template
+      // ID клиента (число)
+      .replace("{customerId}", clientId)
+
+      // Полный клиент-код (YQ11, YX5, JL22)
+      .replace("{clientCode}", clientData.client_code)
+
+      // Список трек кодов каждую строку
+      .replace("{codesList}", codes.map((c, i) => `${i + 1}. ${c}`).join("\n"))
+
+      // Количество трек кодов
+      .replace("{codesCount}", String(codes.length))
+
+      // Вес
+      .replace("{weight}", weight || "0")
+
+      // Итоговая сумма
+      .replace("{totalPrice}", totalPrice.toString())
+
+      // Адрес ПВЗ
+      .replace("{pvz}", PVZ_ADDRESSES[pvz])
+      )
+  : "";
 
   const copyToClipboard = async () => {
     try {
