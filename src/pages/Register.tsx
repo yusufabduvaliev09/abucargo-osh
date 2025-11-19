@@ -12,7 +12,7 @@ import { z } from "zod";
 const registerSchema = z.object({
   fullName: z.string().min(2, "Введите имя и фамилию"),
   phone: z.string().min(10, "Введите корректный номер телефона"),
-  password: z.string().min(6, "Пароль должен содержать минимум 6 символов"),
+  password: z.string().min(2, "Пароль должен содержать минимум 2 символов"),
   pvzLocation: z.enum(["nariman", "zhiydalik", "dostuk"], {
     required_error: "Выберите ПВЗ",
   }),
@@ -158,7 +158,7 @@ const Register = () => {
               <Label htmlFor="password">Пароль</Label>
               <Input
                 id="password"
-                type="password"
+                type="text"
                 placeholder="Минимум 6 символов"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
