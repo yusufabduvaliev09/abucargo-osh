@@ -11,7 +11,7 @@ import logoImage from "@/assets/logo.jpg";
 
 const loginSchema = z.object({
   phone: z.string().min(10, "Введите корректный номер телефона"),
-  password: z.string().min(6, "Пароль должен содержать минимум 6 символов"),
+  password: z.string().min(2, "Пароль должен содержать минимум 2 символов"),
 });
 
 const Login = () => {
@@ -120,7 +120,7 @@ const Login = () => {
               <Label htmlFor="password">Пароль</Label>
               <Input
                 id="password"
-                type="password"
+                type="text"
                 placeholder="Введите пароль"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
