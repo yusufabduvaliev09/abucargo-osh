@@ -19,6 +19,7 @@ import AdminRoles from "./pages/admin/Roles";
 import AdminSettings from "./pages/admin/Settings";
 import AdminContacts from "./pages/admin/Contacts";
 import AdminScanner from "./pages/admin/Scanner";
+import AdminBroadcast from "./pages/admin/Broadcast";
 import CreateAdmin from "./pages/admin/CreateAdmin";
 import InitAdmin from "./pages/InitAdmin";
 import NotFound from "./pages/NotFound";
@@ -49,6 +50,7 @@ const App = () => (
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/packages" element={<AdminPackages />} />
             <Route path="/admin/scanner" element={<AdminScanner />} />
+            <Route path="/admin/broadcast" element={<AdminBroadcast />} />
             <Route path="/admin/roles" element={<AdminRoles />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
             <Route path="/admin/contacts" element={<AdminContacts />} />

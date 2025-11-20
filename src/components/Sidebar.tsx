@@ -1,4 +1,4 @@
-import { Home, Package, Truck, LogOut, Users, PackagePlus, Shield, Settings, MessageCircle, QrCode } from "lucide-react";
+import { Home, Package, Truck, LogOut, Users, PackagePlus, Shield, Settings, MessageCircle, QrCode, Send } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   Sidebar,
@@ -44,6 +44,7 @@ export function AppSidebar({ userRole }: AppSidebarProps) {
     { title: "Пользователи", url: "/admin/users", icon: Users },
     { title: "Приём посылок", url: "/admin/packages", icon: PackagePlus },
     { title: "Сканер", url: "/admin/scanner", icon: QrCode },
+    { title: "Массовая рассылка", url: "/admin/broadcast", icon: Send },
     { title: "Роли", url: "/admin/roles", icon: Shield },
     { title: "Настройки", url: "/admin/settings", icon: Settings },
     { title: "Контакты", url: "/admin/contacts", icon: Users },

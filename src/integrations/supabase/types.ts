@@ -50,6 +50,39 @@ export type Database = {
         }
         Relationships: []
       }
+      mass_messages: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          sent_at: string
+          sent_by: string | null
+          status: string
+          track_codes: string[]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+          track_codes: string[]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          sent_at?: string
+          sent_by?: string | null
+          status?: string
+          track_codes?: string[]
+          user_id?: string
+        }
+        Relationships: []
+      }
       packages: {
         Row: {
           arrived_at: string | null
