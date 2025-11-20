@@ -164,8 +164,39 @@ export type Database = {
         }
         Relationships: []
       }
+      pvz_locations_config: {
+        Row: {
+          address: string | null
+          code: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          code: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          code?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       settings: {
         Row: {
+          company_name: string | null
           contact_info: Json | null
           created_at: string
           id: string
@@ -175,6 +206,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          company_name?: string | null
           contact_info?: Json | null
           created_at?: string
           id?: string
@@ -184,6 +216,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          company_name?: string | null
           contact_info?: Json | null
           created_at?: string
           id?: string

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Eye, EyeOff } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -28,6 +29,7 @@ const Register = () => {
   const [password, setPassword] = useState("");
   const [pvzLocation, setPvzLocation] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,15 +158,25 @@ const Register = () => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Пароль</Label>
-              <Input
-                id="password"
-                type="text"
-                placeholder="Минимум 6 символов"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Минимум 6 символов"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="pvz">Выберите ПВЗ</Label>

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, UserPlus, Upload, Edit, Trash2, MessageCircle, AlertTriangle } from "lucide-react";
+import { Search, UserPlus, Upload, Edit, Trash2, MessageCircle, AlertTriangle, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EditUserDialog } from "@/components/EditUserDialog";
 import { AddUserDialog } from "@/components/AddUserDialog";
@@ -85,6 +85,11 @@ const AdminUsers = () => {
         }
         setLoading(false);
       });
+  };
+
+  const handleResetSearch = () => {
+    setSearchTerm("");
+    fetchUsers();
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -373,6 +378,11 @@ const AdminUsers = () => {
             <Button onClick={handleSearch}>
               <Search className="h-4 w-4 mr-2" />
               Поиск
+            </Button>
+            
+            <Button onClick={handleResetSearch} variant="outline">
+              <X className="h-4 w-4 mr-2" />
+              Сбросить
             </Button>
           </div>
 
