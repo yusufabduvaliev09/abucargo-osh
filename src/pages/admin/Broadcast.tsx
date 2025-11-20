@@ -54,40 +54,68 @@ export default function Broadcast() {
   const fetchUsersWithPackages = async () => {
     setLoading(true);
     try {
-      // Fetch users with in_transit packages
+      // Fetch all in_transit packages
       const { data: packagesData, error: packagesError } = await supabase
         .from("packages")
-        .select("user_id, client_code, track_number")
-        .eq("status", "in_transit");
+        .select("*")
+        .eq("status", "in_transit")
+        .order("created_at", { ascending: false });
 
       if (packagesError) throw packagesError;
 
-      // Group by client_code
-      const userPackagesMap = new Map<string, { user_id: string; track_numbers: string[] }>();
-      
-      packagesData?.forEach((pkg) => {
-        if (!pkg.client_code) return;
+      // For each package, find the matching profile
+      const packagesWithProfiles = await Promise.all(
+        (packagesData || []).map(async (pkg) => {
+          let profile = null;
+          
+          // First try to get user by user_id if it exists
+          if (pkg.user_id) {
+            const { data: profileData } = await supabase
+              .from("profiles")
+              .select("user_id, client_code, full_name, phone, pvz_location")
+              .eq("user_id", pkg.user_id)
+              .maybeSingle();
+            profile = profileData;
+          }
+          
+          // If no user_id, try to find by client_code
+          if (!profile && pkg.client_code) {
+            const { data: profileData } = await supabase
+              .from("profiles")
+              .select("user_id, client_code, full_name, phone, pvz_location")
+              .eq("client_code", pkg.client_code)
+              .maybeSingle();
+            profile = profileData;
+          }
+          
+          return {
+            package: pkg,
+            profile: profile,
+          };
+        })
+      );
+
+      // Filter out packages without profiles and group by user
+      const userPackagesMap = new Map<string, { 
+        profile: any; 
+        track_numbers: string[];
+      }>();
+
+      packagesWithProfiles.forEach(({ package: pkg, profile }) => {
+        if (!profile) return;
         
-        if (!userPackagesMap.has(pkg.client_code)) {
-          userPackagesMap.set(pkg.client_code, {
-            user_id: pkg.user_id || "",
+        const key = profile.client_code;
+        if (!userPackagesMap.has(key)) {
+          userPackagesMap.set(key, {
+            profile: profile,
             track_numbers: [],
           });
         }
-        userPackagesMap.get(pkg.client_code)?.track_numbers.push(pkg.track_number);
+        userPackagesMap.get(key)?.track_numbers.push(pkg.track_number);
       });
 
-      // Fetch profile data for these users
-      const clientCodes = Array.from(userPackagesMap.keys());
-      const { data: profilesData, error: profilesError } = await supabase
-        .from("profiles")
-        .select("user_id, client_code, full_name, phone, pvz_location")
-        .in("client_code", clientCodes);
-
-      if (profilesError) throw profilesError;
-
       // Fetch last message date for each user
-      const userIds = profilesData?.map((p) => p.user_id) || [];
+      const userIds = Array.from(userPackagesMap.values()).map((u) => u.profile.user_id);
       const { data: messagesData } = await supabase
         .from("mass_messages")
         .select("user_id, sent_at")
@@ -101,21 +129,19 @@ export default function Broadcast() {
         }
       });
 
-      // Combine data
-      const usersWithPackages: UserWithPackages[] =
-        profilesData?.map((profile) => {
-          const packageInfo = userPackagesMap.get(profile.client_code);
-          return {
-            user_id: profile.user_id,
-            client_code: profile.client_code,
-            full_name: profile.full_name,
-            phone: profile.phone,
-            pvz_location: profile.pvz_location,
-            track_numbers: packageInfo?.track_numbers || [],
-            package_count: packageInfo?.track_numbers.length || 0,
-            last_message_date: lastMessageMap.get(profile.user_id) || null,
-          };
-        }) || [];
+      // Build final user list
+      const usersWithPackages: UserWithPackages[] = Array.from(userPackagesMap.values()).map(
+        ({ profile, track_numbers }) => ({
+          user_id: profile.user_id,
+          client_code: profile.client_code,
+          full_name: profile.full_name,
+          phone: profile.phone,
+          pvz_location: profile.pvz_location,
+          track_numbers: track_numbers,
+          package_count: track_numbers.length,
+          last_message_date: lastMessageMap.get(profile.user_id) || null,
+        })
+      );
 
       setUsers(usersWithPackages);
       setFilteredUsers(usersWithPackages);
