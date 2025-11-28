@@ -6,9 +6,12 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/Sidebar";
 import { AdminSessionBanner } from "@/components/AdminSessionBanner";
 import { InstallButton } from "@/components/InstallButton";
+import { useSettings } from "@/hooks/useSettings";
+import logoImage from "@/assets/logo.jpg";
 
 export const AppLayout = () => {
   const navigate = useNavigate();
+  const { settings } = useSettings();
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -76,9 +79,14 @@ export const AppLayout = () => {
           <AppSidebar userRole={userRole} />
           <div className="flex-1 flex flex-col">
             <header className="h-14 border-b border-border flex items-center justify-between px-4">
-              <div className="flex items-center">
-                <SidebarTrigger className="mr-4" />
-                <h1 className="text-xl font-bold text-foreground">AbuCargo</h1>
+              <div className="flex items-center gap-3">
+                <SidebarTrigger className="mr-2" />
+                {settings.logoUrl ? (
+                  <img src={settings.logoUrl} alt="Logo" className="h-8 w-8 object-contain" />
+                ) : (
+                  <img src={logoImage} alt="Logo" className="h-8 w-8 object-contain" />
+                )}
+                <h1 className="text-xl font-bold text-foreground">{settings.companyName}</h1>
               </div>
               <InstallButton />
             </header>
