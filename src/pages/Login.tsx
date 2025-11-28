@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useSettings } from "@/hooks/useSettings";
 import { z } from "zod";
 import logoImage from "@/assets/logo.jpg";
 
@@ -18,6 +19,7 @@ const loginSchema = z.object({
 const Login = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { settings } = useSettings();
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -97,12 +99,12 @@ const Login = () => {
         <CardHeader className="text-center space-y-2">
           <div className="flex justify-center mb-4">
             <img 
-              src={logoImage} 
-              alt="AbuCargo Logo" 
+              src={settings.logoUrl || logoImage} 
+              alt={`${settings.companyName} Logo`}
               className="w-32 h-32 object-contain"
             />
           </div>
-          <CardTitle className="text-2xl font-bold">AbuCargo</CardTitle>
+          <CardTitle className="text-2xl font-bold">{settings.companyName}</CardTitle>
           <CardDescription>Система учёта посылок</CardDescription>
         </CardHeader>
         <CardContent>

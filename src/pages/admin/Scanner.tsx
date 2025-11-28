@@ -7,8 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Camera, Plus, Copy, MessageCircle, Trash2, CameraOff } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
-
-type PvzLocation = "nariman" | "zhiydalik" | "dostuk";
+import { usePvzLocations } from "@/hooks/useSettings";
 
 interface ClientProfile {
   full_name: string;
@@ -17,11 +16,12 @@ interface ClientProfile {
   pvz_location: string;
 }
 
-const PVZ_ADDRESSES = {
-  nariman: "Нариман",
-  zhiydalik: "Жыйдалик УПТК",
-  dostuk: "Достук"
-};
+interface PvzConfig {
+  id: string;
+  code: string;
+  name: string;
+  address: string | null;
+}
 
 // Список поддерживаемых форматов штрих-кодов (только 1D штрих-коды)
 const BARCODE_FORMATS = [
@@ -37,7 +37,8 @@ const BARCODE_FORMATS = [
 ];
 
 export default function Scanner() {
-  const [pvz, setPvz] = useState<PvzLocation>("nariman");
+  const { pvzLocations, pvzMap } = usePvzLocations();
+  const [pvz, setPvz] = useState<string>("");
   const [codes, setCodes] = useState<string[]>([]);
   const [manualCode, setManualCode] = useState("");
   const [clientId, setClientId] = useState("");
@@ -49,6 +50,13 @@ export default function Scanner() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isInIframe, setIsInIframe] = useState(false);
   const [template, setTemplate] = useState<string>("");
+
+  // Установить первый ПВЗ при загрузке
+  useEffect(() => {
+    if (pvzLocations.length > 0 && !pvz) {
+      setPvz(pvzLocations[0].code);
+    }
+  }, [pvzLocations, pvz]);
 
   const qrScannerRef = useRef<Html5Qrcode | null>(null);
   const scannerDivId = "qr-reader";
@@ -111,8 +119,14 @@ export default function Scanner() {
   };
 
   // -------------------- CLIENT FETCH --------------------
-  const getClientCode = (id: string, pvzLocation: PvzLocation): string => {
-    const prefix = pvzLocation === "nariman" ? "YQ" : pvzLocation === "zhiydalik" ? "YX" : "JL";
+  const getClientCode = (id: string, pvzCode: string): string => {
+    // Получаем префикс из конфигурации или используем стандартные
+    const prefixMap: Record<string, string> = {
+      nariman: "YQ",
+      zhiydalik: "YX",
+      dostuk: "JL",
+    };
+    const prefix = prefixMap[pvzCode] || pvzCode.toUpperCase().slice(0, 2);
     return `${prefix}${id}`;
   };
 
@@ -144,10 +158,12 @@ export default function Scanner() {
 
   // -------------------- TEMPLATE FETCH --------------------
   const fetchTemplate = async () => {
+    if (!pvz) return;
+    
     const { data, error } = await supabase
       .from("whatsapp_templates")
       .select("template")
-      .eq("pvz_location", pvz)
+      .eq("pvz_location", pvz as any)
       .single();
 
     if (data && !error) {
@@ -156,7 +172,7 @@ export default function Scanner() {
   };
 
   useEffect(() => {
-    fetchTemplate();
+    if (pvz) fetchTemplate();
   }, [pvz]);
 
   useEffect(() => {
@@ -359,7 +375,7 @@ export default function Scanner() {
         .replace("{codesCount}", codes.length.toString())
         .replace("{weight}", weight || "0")
         .replace("{totalPrice}", totalPrice.toString())
-        .replace("{address}", PVZ_ADDRESSES[pvz])
+        .replace("{address}", pvzMap[pvz] || pvz)
     : "";
 
   const copyToClipboard = async () => {
@@ -395,14 +411,16 @@ export default function Scanner() {
           <CardTitle>Выбор ПВЗ</CardTitle>
         </CardHeader>
         <CardContent>
-          <Select value={pvz} onValueChange={(v) => setPvz(v as PvzLocation)}>
+          <Select value={pvz} onValueChange={setPvz}>
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue placeholder="Выберите ПВЗ" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="nariman">Нариман</SelectItem>
-              <SelectItem value="zhiydalik">Жыйдалик УПТК</SelectItem>
-              <SelectItem value="dostuk">Достук</SelectItem>
+              {pvzLocations.map((location) => (
+                <SelectItem key={location.id} value={location.code}>
+                  {location.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </CardContent>
