@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,20 +8,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useSettings, usePvzLocations } from "@/hooks/useSettings";
 import { z } from "zod";
 
 const registerSchema = z.object({
   fullName: z.string().min(2, "Введите имя и фамилию"),
   phone: z.string().min(10, "Введите корректный номер телефона"),
   password: z.string().min(2, "Пароль должен содержать минимум 2 символов"),
-  pvzLocation: z.enum(["nariman", "zhiydalik", "dostuk"], {
-    required_error: "Выберите ПВЗ",
-  }),
+  pvzLocation: z.string().min(1, "Выберите ПВЗ"),
 });
 
 const Register = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { settings } = useSettings();
+  const { pvzLocations } = usePvzLocations();
   const [searchParams] = useSearchParams();
   const telegramId = searchParams.get("tg_id");
   const [fullName, setFullName] = useState("");
@@ -130,7 +131,7 @@ const Register = () => {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">Регистрация</CardTitle>
-          <CardDescription>Создайте новый аккаунт в AbuCargo</CardDescription>
+          <CardDescription>Создайте новый аккаунт в {settings.companyName}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleRegister} className="space-y-4">
@@ -185,9 +186,11 @@ const Register = () => {
                   <SelectValue placeholder="Выберите пункт выдачи" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="nariman">Нариман</SelectItem>
-                  <SelectItem value="zhiydalik">Жийдалик УПТК</SelectItem>
-                  <SelectItem value="dostuk">Достук</SelectItem>
+                  {pvzLocations.map((pvz) => (
+                    <SelectItem key={pvz.id} value={pvz.code}>
+                      {pvz.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
