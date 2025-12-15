@@ -44,7 +44,7 @@ export default function Scanner() {
   const [clientId, setClientId] = useState("");
   const [clientData, setClientData] = useState<ClientProfile | null>(null);
   const [weight, setWeight] = useState("");
-  const [pricePerKg, setPricePerKg] = useState("250");
+  const [pricePerKg, setPricePerKg] = useState("230");
   const [isScanning, setIsScanning] = useState(false);
   const [isCameraLoading, setIsCameraLoading] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -589,7 +589,7 @@ export default function Scanner() {
               <SelectValue placeholder="Цена за кг" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="250">250 сом/кг</SelectItem>
+              <SelectItem value="230">230 сом/кг</SelectItem>
               <SelectItem value="240">240 сом/кг</SelectItem>
             </SelectContent>
           </Select>
