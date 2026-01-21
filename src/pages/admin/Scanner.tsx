@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Camera, Plus, Copy, MessageCircle, Trash2, CameraOff } from "lucide-react";
+import { Camera, Plus, Copy, MessageCircle, Trash2, CameraOff, Flashlight, FlashlightOff } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { usePvzLocations } from "@/hooks/useSettings";
 
@@ -50,6 +50,7 @@ export default function Scanner() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isInIframe, setIsInIframe] = useState(false);
   const [template, setTemplate] = useState<string>("");
+  const [isFlashlightOn, setIsFlashlightOn] = useState(false);
 
   // Установить первый ПВЗ при загрузке
   useEffect(() => {
@@ -307,6 +308,45 @@ export default function Scanner() {
     }
   };
 
+  // Переключение фонарика
+  const toggleFlashlight = async () => {
+    try {
+      if (!qrScannerRef.current || !isScanning) {
+        toast({
+          title: "Фонарик недоступен",
+          description: "Сначала включите камеру",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const track = qrScannerRef.current.getRunningTrackCameraCapabilities?.();
+      
+      if (track && track.torchFeature && track.torchFeature().isSupported()) {
+        if (isFlashlightOn) {
+          await track.torchFeature().apply(false);
+          setIsFlashlightOn(false);
+        } else {
+          await track.torchFeature().apply(true);
+          setIsFlashlightOn(true);
+        }
+      } else {
+        toast({
+          title: "Фонарик не поддерживается",
+          description: "Ваше устройство не поддерживает фонарик",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error("Flashlight error:", err);
+      toast({
+        title: "Ошибка фонарика",
+        description: "Не удалось переключить фонарик",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -445,27 +485,45 @@ export default function Scanner() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-3">
-            {/* Кнопка управления камерой */}
-            <Button
-              onClick={toggleCamera}
-              variant={isScanning ? "destructive" : "default"}
-              disabled={isCameraLoading}
-              className="w-full"
-            >
-              {isCameraLoading ? (
-                "Загрузка..."
-              ) : isScanning ? (
-                <>
-                  <CameraOff className="h-4 w-4 mr-2" />
-                  Остановить камеру
-                </>
-              ) : (
-                <>
-                  <Camera className="h-4 w-4 mr-2" />
-                  Открыть камеру
-                </>
+            {/* Кнопки управления камерой */}
+            <div className="flex gap-2">
+              <Button
+                onClick={toggleCamera}
+                variant={isScanning ? "destructive" : "default"}
+                disabled={isCameraLoading}
+                className="flex-1"
+              >
+                {isCameraLoading ? (
+                  "Загрузка..."
+                ) : isScanning ? (
+                  <>
+                    <CameraOff className="h-4 w-4 mr-2" />
+                    Остановить
+                  </>
+                ) : (
+                  <>
+                    <Camera className="h-4 w-4 mr-2" />
+                    Открыть камеру
+                  </>
+                )}
+              </Button>
+
+              {/* Кнопка фонарика */}
+              {isScanning && (
+                <Button
+                  onClick={toggleFlashlight}
+                  variant={isFlashlightOn ? "secondary" : "outline"}
+                  size="icon"
+                  className="shrink-0"
+                >
+                  {isFlashlightOn ? (
+                    <FlashlightOff className="h-5 w-5" />
+                  ) : (
+                    <Flashlight className="h-5 w-5" />
+                  )}
+                </Button>
               )}
-            </Button>
+            </div>
 
             {/* Сообщения об ошибках */}
             {(cameraError || isInIframe) && (
@@ -481,20 +539,12 @@ export default function Scanner() {
 
             {/* Область сканирования */}
             {(isScanning || isCameraLoading) && (
-              <div className="border-2 border-primary rounded-lg overflow-hidden bg-black">
+              <div className="rounded-lg overflow-hidden bg-black">
                 <div 
                   id={scannerDivId} 
                   className="w-full"
-                  style={{ minHeight: '250px' }}
+                  style={{ minHeight: '280px' }}
                 />
-                <div className="p-3 bg-primary/10 text-center text-sm">
-                  <p className="text-primary font-medium">
-                    Наведите камеру на штрих-код
-                  </p>
-                  <p className="text-muted-foreground text-xs mt-1">
-                    CODE_128, CODE_39, EAN_13
-                  </p>
-                </div>
               </div>
             )}
           </div>
